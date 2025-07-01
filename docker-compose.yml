@@ -1,5 +1,4 @@
 # docker-compose.yml per Weaviate locale
-"""
 version: '3.4'
 services:
   weaviate:
@@ -10,9 +9,10 @@ services:
     - '8080'
     - --scheme
     - http
-    image: semitechnologies/weaviate:1.22.0
+    image: semitechnologies/weaviate:1.25.0
     ports:
     - 8080:8080
+    - 50051:50051
     restart: on-failure:0
     environment:
       QUERY_DEFAULTS_LIMIT: 25
@@ -26,4 +26,3 @@ services:
 
 volumes:
   weaviate_data:
-"""

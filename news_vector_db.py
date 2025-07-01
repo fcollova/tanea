@@ -10,8 +10,8 @@ import time
 
 import weaviate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import Weaviate
+from langchain_community.embeddings import FastEmbedEmbeddings
+from langchain_weaviate import WeaviateVectorStore
 from langchain.schema import Document
 from langchain.tools import TavilySearchResults
 from langchain.retrievers.web_research import WebResearchRetriever
@@ -41,15 +41,15 @@ class NewsVectorDB:
         self,
         weaviate_url: str = "http://localhost:8080",
         weaviate_api_key: Optional[str] = None,
-        openai_api_key: Optional[str] = None,
         tavily_api_key: Optional[str] = None,
-        index_name: str = "NewsArticles"
+        index_name: str = "NewsArticles",
+        embedding_model: str = "intfloat/multilingual-e5-base"
     ):
         self.weaviate_url = weaviate_url
         self.weaviate_api_key = weaviate_api_key
-        self.openai_api_key = openai_api_key
         self.tavily_api_key = tavily_api_key
         self.index_name = index_name
+        self.embedding_model = embedding_model
         
         # Inizializza i componenti
         self._init_weaviate_client()
@@ -66,11 +66,10 @@ class NewsVectorDB:
         try:
             auth_config = None
             if self.weaviate_api_key:
-                auth_config = weaviate.AuthApiKey(api_key=self.weaviate_api_key)
+                auth_config = weaviate.auth.AuthApiKey(api_key=self.weaviate_api_key)
             
-            self.weaviate_client = weaviate.Client(
-                url=self.weaviate_url,
-                auth_client_secret=auth_config
+            self.weaviate_client = weaviate.connect_to_local(
+                auth_credentials=auth_config
             )
             
             # Crea lo schema se non esiste
@@ -83,12 +82,41 @@ class NewsVectorDB:
     
     def _init_embeddings(self):
         """Inizializza il modello di embedding"""
-        if not self.openai_api_key:
-            raise ValueError("OpenAI API key è richiesta per gli embeddings")
+        logger.info("Inizializzazione FastEmbed con modello BERTino italiano")
         
-        os.environ["OPENAI_API_KEY"] = self.openai_api_key
-        self.embeddings = OpenAIEmbeddings()
-        logger.info("Embeddings OpenAI inizializzati")
+        try:
+            # Importa le classi necessarie per il modello custom
+            from fastembed import TextEmbedding
+            from fastembed.common.model_description import PoolingType, ModelSource
+            
+            # Aggiunge il modello BERTino custom
+            TextEmbedding.add_custom_model(
+                model="nickprock/multi-sentence-BERTino",
+                pooling=PoolingType.MEAN,
+                normalization=True,
+                sources=ModelSource(hf="nickprock/multi-sentence-BERTino"),
+                dim=768,
+                model_file="onnx/model_qint8_avx512_vnni.onnx",
+            )
+            
+            self.embeddings = FastEmbedEmbeddings(
+                model_name="nickprock/multi-sentence-BERTino",
+                max_length=512,
+                cache_dir="./fastembed_cache"
+            )
+            logger.info("FastEmbed BERTino inizializzato con successo")
+            
+        except Exception as e:
+            logger.error(f"Errore nell'inizializzazione di BERTino: {e}")
+            logger.info("Tentativo con modello di fallback...")
+            
+            # Fallback a modello supportato
+            self.embeddings = FastEmbedEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2",
+                max_length=512,
+                cache_dir="./fastembed_cache"
+            )
+            logger.info("Modello di fallback inizializzato")
     
     def _init_text_splitter(self):
         """Inizializza il text splitter"""
@@ -114,79 +142,71 @@ class NewsVectorDB:
     
     def _init_vector_store(self):
         """Inizializza il vector store"""
-        self.vector_store = Weaviate(
+        self.vector_store = WeaviateVectorStore(
             client=self.weaviate_client,
             index_name=self.index_name,
             text_key="content",
             embedding=self.embeddings,
-            by_text=False,
         )
         logger.info("Vector store inizializzato")
     
     def _create_schema(self):
         """Crea lo schema Weaviate se non esiste"""
-        schema = {
-            "classes": [
-                {
-                    "class": self.index_name,
-                    "description": "Articoli di notizie per dominio specifico",
-                    "vectorizer": "none",  # Usiamo embeddings esterni
-                    "properties": [
-                        {
-                            "name": "content",
-                            "dataType": ["text"],
-                            "description": "Contenuto dell'articolo"
-                        },
-                        {
-                            "name": "title",
-                            "dataType": ["string"],
-                            "description": "Titolo dell'articolo"
-                        },
-                        {
-                            "name": "url",
-                            "dataType": ["string"],
-                            "description": "URL dell'articolo"
-                        },
-                        {
-                            "name": "domain",
-                            "dataType": ["string"],
-                            "description": "Dominio di appartenenza"
-                        },
-                        {
-                            "name": "published_date",
-                            "dataType": ["date"],
-                            "description": "Data di pubblicazione"
-                        },
-                        {
-                            "name": "keywords",
-                            "dataType": ["string[]"],
-                            "description": "Parole chiave associate"
-                        },
-                        {
-                            "name": "source",
-                            "dataType": ["string"],
-                            "description": "Fonte dell'articolo"
-                        },
-                        {
-                            "name": "content_hash",
-                            "dataType": ["string"],
-                            "description": "Hash per deduplicazione"
-                        }
-                    ]
-                }
-            ]
-        }
-        
         try:
-            # Controlla se la classe esiste già
-            existing_schema = self.weaviate_client.schema.get()
-            class_names = [cls["class"] for cls in existing_schema.get("classes", [])]
+            # Controlla se la collezione esiste già
+            if self.weaviate_client.collections.exists(self.index_name):
+                logger.info(f"Collezione {self.index_name} già esistente")
+                return
             
-            if self.index_name not in class_names:
-                self.weaviate_client.schema.create(schema)
-                logger.info(f"Schema {self.index_name} creato")
-            else:
-                logger.info(f"Schema {self.index_name} già esistente")
+            # Crea la collezione con il nuovo schema v4
+            self.weaviate_client.collections.create(
+                name=self.index_name,
+                description="Articoli di notizie per dominio specifico",
+                vectorizer_config=weaviate.classes.config.Configure.Vectorizer.none(),
+                properties=[
+                    weaviate.classes.config.Property(
+                        name="content",
+                        data_type=weaviate.classes.config.DataType.TEXT,
+                        description="Contenuto dell'articolo"
+                    ),
+                    weaviate.classes.config.Property(
+                        name="title",
+                        data_type=weaviate.classes.config.DataType.TEXT,
+                        description="Titolo dell'articolo"
+                    ),
+                    weaviate.classes.config.Property(
+                        name="url",
+                        data_type=weaviate.classes.config.DataType.TEXT,
+                        description="URL dell'articolo"
+                    ),
+                    weaviate.classes.config.Property(
+                        name="domain",
+                        data_type=weaviate.classes.config.DataType.TEXT,
+                        description="Dominio di appartenenza"
+                    ),
+                    weaviate.classes.config.Property(
+                        name="published_date",
+                        data_type=weaviate.classes.config.DataType.DATE,
+                        description="Data di pubblicazione"
+                    ),
+                    weaviate.classes.config.Property(
+                        name="keywords",
+                        data_type=weaviate.classes.config.DataType.TEXT_ARRAY,
+                        description="Parole chiave associate"
+                    ),
+                    weaviate.classes.config.Property(
+                        name="source",
+                        data_type=weaviate.classes.config.DataType.TEXT,
+                        description="Fonte dell'articolo"
+                    ),
+                    weaviate.classes.config.Property(
+                        name="content_hash",
+                        data_type=weaviate.classes.config.DataType.TEXT,
+                        description="Hash per deduplicazione"
+                    )
+                ]
+            )
+            logger.info(f"Collezione {self.index_name} creata")
                 
         except Exception as e:
             logger.error(f"Errore nella creazione dello schema: {e}")
@@ -230,7 +250,7 @@ class NewsVectorDB:
                         "content": result.get("content", ""),
                         "url": result.get("url", ""),
                         "source": result.get("source", ""),
-                        "published_date": result.get("published_date", datetime.now().isoformat()),
+                        "published_date": result.get("published_date", datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")),
                         "domain": config.domain,
                         "keywords": config.keywords
                     }
@@ -416,7 +436,6 @@ def main():
     # Inizializza il sistema
     news_db = NewsVectorDB(
         weaviate_url="http://localhost:8080",
-        openai_api_key="your-openai-key",
         tavily_api_key="your-tavily-key"
     )
     

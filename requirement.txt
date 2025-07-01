@@ -1,28 +1,46 @@
 # ============================================================================
-# requirements.txt
-"""
-# Core dependencies
-weaviate-client>=3.24.0
+# News Vector DB System - Requirements
+# Sistema di raccolta e ricerca semantica notizie calcio Serie A
+# ============================================================================
+
+# === CORE DEPENDENCIES ===
+# Vector database and embeddings
+weaviate-client>=4.0.0
+fastembed>=0.2.0
+onnxruntime>=1.16.0
+
+# LangChain framework
 langchain>=0.1.0
-langchain-openai>=0.1.0
-openai>=1.0.0
-tiktoken>=0.5.0
+langchain-community>=0.1.0
+langchain-weaviate>=0.0.5
 
-# Search and retrieval
+# === WEB SEARCH ===
+# News search API
 tavily-python>=0.3.0
-google-search-results>=2.4.0
 
-# Utilities
+# === UTILITIES ===
+# Task scheduling
 schedule>=1.2.0
+
+# Environment configuration
 python-dotenv>=1.0.0
+
+# HTTP requests
 requests>=2.31.0
 
-# Optional: for better text processing
-nltk>=3.8
-spacy>=3.7.0
+# === OPTIONAL DEPENDENCIES ===
+# Text processing (uncomment if needed)
+# nltk>=3.8
+# spacy>=3.7.0
 
-# Development
+# === DEVELOPMENT TOOLS ===
+# Testing and code quality
 pytest>=7.0.0
 black>=23.0.0
 flake8>=6.0.0
-"""
+
+# === NOTES ===
+# - FastEmbed: Veloce e leggero (~150MB)
+# - ONNX Runtime: Ottimizzazioni CPU
+# - Tavily: API gratuita per ricerca notizie
+# - Weaviate: Database vettoriale locale via Docker

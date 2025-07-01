@@ -8,7 +8,7 @@ import asyncio
 import logging
 from datetime import datetime
 from news_vector_db import NewsVectorDB
-from config import NEWS_DOMAINS, VECTOR_DB_CONFIG, WEAVIATE_URL, OPENAI_API_KEY, TAVILY_API_KEY
+from config import NEWS_DOMAINS, VECTOR_DB_CONFIG, WEAVIATE_URL, TAVILY_API_KEY, EMBEDDING_MODEL
 
 # Configurazione logging
 logging.basicConfig(
@@ -23,9 +23,9 @@ class NewsQASystem:
     def __init__(self):
         self.news_db = NewsVectorDB(
             weaviate_url=WEAVIATE_URL,
-            openai_api_key=OPENAI_API_KEY,
             tavily_api_key=TAVILY_API_KEY,
-            index_name=VECTOR_DB_CONFIG["index_name"]
+            index_name=VECTOR_DB_CONFIG["index_name"],
+            embedding_model=EMBEDDING_MODEL
         )
     
     def initial_setup(self):
@@ -127,25 +127,28 @@ class NewsQASystem:
 def demo_questions():
     """Lista di domande di esempio per test"""
     return [
-        "Quali sono le ultime novità nell'intelligenza artificiale in Italia?",
-        "Come sta andando la borsa italiana questa settimana?",
-        "Ci sono nuove scoperte mediche interessanti?",
-        "Quali sono le ultime notizie sui cambiamenti climatici?",
-        "Che sviluppi ci sono nel settore delle criptovalute?",
-        "Quali sono le startup tecnologiche più promettenti in Italia?",
-        "Come sta reagendo l'economia italiana all'inflazione?",
-        "Ci sono novità sulla transizione energetica in Italia?"
+        "Chi ha vinto l'ultima partita di Serie A?",
+        "Quali sono i risultati dell'ultima giornata di campionato?",
+        "Come sta andando la Juventus in Serie A?",
+        "Ci sono novità sul calciomercato?",
+        "Chi è in testa alla classifica di Serie A?",
+        "Quali sono le ultime notizie sull'Inter?",
+        "Come sta giocando il Milan questa stagione?",
+        "Ci sono infortuni importanti in Serie A?"
     ]
 
 def main():
     """Funzione principale di esempio"""
-    print("🚀 Avvio News Vector DB System")
+    print("🚀 News Vector DB System - Sistema Q&A")
+    print("=" * 50)
+    print("💡 Per caricare notizie, usa: python load_news.py")
+    print("🔍 Questo script esegue solo ricerche e test Q&A")
     print("=" * 50)
     
     # Inizializza il sistema
     qa_system = NewsQASystem()
     
-    # Setup iniziale (commentato per evitare lunghe attese in demo)
+    # Setup iniziale rimosso - usa load_news.py per caricare notizie
     # qa_system.initial_setup()
     
     # Mostra statistiche
@@ -181,9 +184,11 @@ def main():
         print(f"\n📝 Contesto (anteprima):\n{context_preview}")
         print("\n" + "=" * 50)
     
-    print("\n✅ Demo completata!")
-    print("\nPer avviare gli aggiornamenti automatici, decommenta:")
-    print("qa_system.start_automated_updates()")
+    print("\n✅ Demo Q&A completata!")
+    print("\n📝 Comandi utili:")
+    print("  • Caricare notizie: python load_news.py")
+    print("  • Test Q&A: python example_usage.py")
+    print("  • Avviare sistema: ./start.sh")
 
 if __name__ == "__main__":
     main()
