@@ -1,0 +1,28 @@
+# ============================================================================
+# requirements.txt
+"""
+# Core dependencies
+weaviate-client>=3.24.0
+langchain>=0.1.0
+langchain-openai>=0.1.0
+openai>=1.0.0
+tiktoken>=0.5.0
+
+# Search and retrieval
+tavily-python>=0.3.0
+google-search-results>=2.4.0
+
+# Utilities
+schedule>=1.2.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+
+# Optional: for better text processing
+nltk>=3.8
+spacy>=3.7.0
+
+# Development
+pytest>=7.0.0
+black>=23.0.0
+flake8>=6.0.0
+"""
