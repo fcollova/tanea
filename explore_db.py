@@ -7,24 +7,33 @@ Script per esplorare e visualizzare i contenuti del vector database
 
 import json
 from datetime import datetime
-from news_vector_db import NewsVectorDB
-from config import WEAVIATE_URL, TAVILY_API_KEY, VECTOR_DB_CONFIG, EMBEDDING_MODEL
+from news_db_manager import NewsVectorDB
+from config import get_config, setup_logging
 
 class DatabaseExplorer:
     """Esploratore per il database vettoriale"""
     
-    def __init__(self):
-        self.news_db = NewsVectorDB(
-            weaviate_url=WEAVIATE_URL,
-            tavily_api_key=TAVILY_API_KEY,
-            index_name=VECTOR_DB_CONFIG["index_name"],
-            embedding_model=EMBEDDING_MODEL
-        )
+    def __init__(self, environment: str = None):
+        self.config = get_config(environment)
+        self.news_db = NewsVectorDB(environment)
+    
+    def close(self):
+        """Chiude le connessioni"""
+        if hasattr(self, 'news_db'):
+            self.news_db.close()
+    
+    def __enter__(self):
+        """Support for context manager"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Cleanup when exiting context manager"""
+        self.close()
     
     def get_all_articles(self, limit=50):
         """Recupera tutti gli articoli dal database"""
         try:
-            collection = self.news_db.weaviate_client.collections.get(self.news_db.index_name)
+            collection = self.news_db.weaviate_client.collections.get(self.news_db.vector_db_manager.index_name)
             
             response = collection.query.fetch_objects(
                 return_properties=[
@@ -51,7 +60,7 @@ class DatabaseExplorer:
     def get_statistics(self):
         """Ottieni statistiche dettagliate"""
         try:
-            collection = self.news_db.weaviate_client.collections.get(self.news_db.index_name)
+            collection = self.news_db.weaviate_client.collections.get(self.news_db.vector_db_manager.index_name)
             
             # Conta totale
             total = collection.aggregate.over_all(total_count=True).total_count
@@ -117,7 +126,7 @@ class DatabaseExplorer:
     def delete_article_by_id(self, article_id):
         """Elimina un articolo per ID"""
         try:
-            collection = self.news_db.weaviate_client.collections.get(self.news_db.index_name)
+            collection = self.news_db.weaviate_client.collections.get(self.news_db.vector_db_manager.index_name)
             collection.data.delete_by_id(article_id)
             print(f"✅ Articolo {article_id} eliminato")
             return True
@@ -130,35 +139,35 @@ def quick_stats():
     print("🔍 Database Explorer - News Vector DB")
     print("=" * 50)
     
-    explorer = DatabaseExplorer()
-    print("\n📊 Statistiche Database:")
-    print("-" * 30)
-    stats = explorer.get_statistics()
-    
-    if "error" in stats:
-        print(f"❌ {stats['error']}")
-        return
-    
-    print(f"📈 Totale articoli: {stats['total_articles']}")
-    
-    print(f"\n🏷️  Per dominio:")
-    for domain, count in stats['domain_stats'].items():
-        print(f"  • {domain}: {count}")
-    
-    print(f"\n📰 Top fonti:")
-    for source, count in list(stats['source_stats'].items())[:5]:
-        print(f"  • {source}: {count}")
-    
-    print(f"\n📅 Per data:")
-    for date, count in list(stats['date_stats'].items())[:5]:
-        print(f"  • {date}: {count}")
-    
-    print(f"\n📰 Anteprima articoli:")
-    print("-" * 30)
-    for i, article in enumerate(stats['sample_articles'], 1):
-        print(f"\n{i}. 📰 {article.get('title', 'N/A')}")
-        print(f"   🌐 Fonte: {article.get('source', 'N/A')}")
-        print(f"   🏷️  Dominio: {article.get('domain', 'N/A')}")
+    with DatabaseExplorer() as explorer:
+        print("\n📊 Statistiche Database:")
+        print("-" * 30)
+        stats = explorer.get_statistics()
+        
+        if "error" in stats:
+            print(f"❌ {stats['error']}")
+            return
+        
+        print(f"📈 Totale articoli: {stats['total_articles']}")
+        
+        print(f"\n🏷️  Per dominio:")
+        for domain, count in stats['domain_stats'].items():
+            print(f"  • {domain}: {count}")
+        
+        print(f"\n📰 Top fonti:")
+        for source, count in list(stats['source_stats'].items())[:5]:
+            print(f"  • {source}: {count}")
+        
+        print(f"\n📅 Per data:")
+        for date, count in list(stats['date_stats'].items())[:5]:
+            print(f"  • {date}: {count}")
+        
+        print(f"\n📰 Anteprima articoli:")
+        print("-" * 30)
+        for i, article in enumerate(stats['sample_articles'], 1):
+            print(f"\n{i}. 📰 {article.get('title', 'N/A')}")
+            print(f"   🌐 Fonte: {article.get('source', 'N/A')}")
+            print(f"   🏷️  Dominio: {article.get('domain', 'N/A')}")
 
 def main():
     """Menu interattivo per esplorare il database"""
@@ -172,114 +181,113 @@ def main():
     print("🔍 Database Explorer - News Vector DB")
     print("=" * 50)
     
-    explorer = DatabaseExplorer()
-    
-    while True:
-        print("\n📋 Cosa vuoi fare?")
-        print("1. 📊 Mostra statistiche generali")
-        print("2. 📰 Lista tutti gli articoli")
-        print("3. 🔍 Cerca per parola chiave")
-        print("4. 📋 Mostra articoli per dominio")
-        print("5. 🗑️  Elimina articolo per ID")
-        print("6. 💾 Esporta dati in JSON")
-        print("0. ❌ Esci")
-        
-        choice = input("\n👉 Scelta (0-6): ").strip()
-        
-        if choice == "0":
-            print("👋 Arrivederci!")
-            break
-        
-        elif choice == "1":
-            print("\n📊 Statistiche Database:")
-            print("-" * 30)
-            stats = explorer.get_statistics()
+    with DatabaseExplorer() as explorer:
+        while True:
+            print("\n📋 Cosa vuoi fare?")
+            print("1. 📊 Mostra statistiche generali")
+            print("2. 📰 Lista tutti gli articoli")
+            print("3. 🔍 Cerca per parola chiave")
+            print("4. 📋 Mostra articoli per dominio")
+            print("5. 🗑️  Elimina articolo per ID")
+            print("6. 💾 Esporta dati in JSON")
+            print("0. ❌ Esci")
             
-            if "error" in stats:
-                print(f"❌ {stats['error']}")
-                continue
+            choice = input("\n👉 Scelta (0-6): ").strip()
             
-            print(f"📈 Totale articoli: {stats['total_articles']}")
+            if choice == "0":
+                print("👋 Arrivederci!")
+                break
             
-            print(f"\n🏷️  Per dominio:")
-            for domain, count in stats['domain_stats'].items():
-                print(f"  • {domain}: {count}")
-            
-            print(f"\n📰 Top fonti:")
-            for source, count in list(stats['source_stats'].items())[:5]:
-                print(f"  • {source}: {count}")
-            
-            print(f"\n📅 Per data:")
-            for date, count in list(stats['date_stats'].items())[:5]:
-                print(f"  • {date}: {count}")
-        
-        elif choice == "2":
-            limit = input("📰 Numero articoli da mostrare (default 10): ").strip()
-            limit = int(limit) if limit.isdigit() else 10
-            
-            articles = explorer.get_all_articles(limit)
-            print(f"\n📰 Ultimi {len(articles)} articoli:")
-            print("-" * 50)
-            
-            for i, article in enumerate(articles, 1):
-                print(f"\n{i}. 📰 {article.get('title', 'N/A')}")
-                print(f"   🌐 Fonte: {article.get('source', 'N/A')}")
-                print(f"   🏷️  Dominio: {article.get('domain', 'N/A')}")
-                print(f"   📅 Data: {article.get('published_date', 'N/A')}")
-                print(f"   🆔 ID: {article.get('id', 'N/A')}")
-                content = article.get('content', '')
-                if content:
-                    preview = content[:150] + "..." if len(content) > 150 else content
-                    print(f"   📝 Anteprima: {preview}")
-        
-        elif choice == "3":
-            keyword = input("🔍 Inserisci parola chiave: ").strip()
-            if keyword:
-                results = explorer.search_by_keyword(keyword)
-                print(f"\n🔍 Risultati per '{keyword}':")
+            elif choice == "1":
+                print("\n📊 Statistiche Database:")
                 print("-" * 30)
+                stats = explorer.get_statistics()
                 
-                if not results:
-                    print("❌ Nessun risultato trovato")
-                else:
-                    for i, result in enumerate(results, 1):
-                        print(f"\n{i}. 📰 {result['metadata'].get('title', 'N/A')}")
-                        print(f"   🌐 {result['metadata'].get('source', 'N/A')}")
-                        print(f"   📝 {result['content']}")
-        
-        elif choice == "4":
-            stats = explorer.get_statistics()
-            if "domain_stats" in stats:
-                domain = input(f"🏷️  Domini disponibili: {list(stats['domain_stats'].keys())}\nScegli dominio: ").strip()
+                if "error" in stats:
+                    print(f"❌ {stats['error']}")
+                    continue
                 
-                articles = explorer.get_all_articles(limit=100)
-                domain_articles = [a for a in articles if a.get('domain') == domain]
+                print(f"📈 Totale articoli: {stats['total_articles']}")
                 
-                print(f"\n📰 Articoli per '{domain}' ({len(domain_articles)}):")
-                print("-" * 40)
+                print(f"\n🏷️  Per dominio:")
+                for domain, count in stats['domain_stats'].items():
+                    print(f"  • {domain}: {count}")
                 
-                for i, article in enumerate(domain_articles, 1):
-                    print(f"{i}. {article.get('title', 'N/A')}")
-        
-        elif choice == "5":
-            article_id = input("🆔 Inserisci ID articolo da eliminare: ").strip()
-            if article_id:
-                confirm = input(f"⚠️  Sicuro di voler eliminare {article_id}? (y/N): ").strip().lower()
-                if confirm == 'y':
-                    explorer.delete_article_by_id(article_id)
-        
-        elif choice == "6":
-            print("💾 Esportazione dati...")
-            articles = explorer.get_all_articles(limit=1000)
-            filename = f"database_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                print(f"\n📰 Top fonti:")
+                for source, count in list(stats['source_stats'].items())[:5]:
+                    print(f"  • {source}: {count}")
+                
+                print(f"\n📅 Per data:")
+                for date, count in list(stats['date_stats'].items())[:5]:
+                    print(f"  • {date}: {count}")
             
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(articles, f, ensure_ascii=False, indent=2)
+            elif choice == "2":
+                limit = input("📰 Numero articoli da mostrare (default 10): ").strip()
+                limit = int(limit) if limit.isdigit() else 10
+                
+                articles = explorer.get_all_articles(limit)
+                print(f"\n📰 Ultimi {len(articles)} articoli:")
+                print("-" * 50)
+                
+                for i, article in enumerate(articles, 1):
+                    print(f"\n{i}. 📰 {article.get('title', 'N/A')}")
+                    print(f"   🌐 Fonte: {article.get('source', 'N/A')}")
+                    print(f"   🏷️  Dominio: {article.get('domain', 'N/A')}")
+                    print(f"   📅 Data: {article.get('published_date', 'N/A')}")
+                    print(f"   🆔 ID: {article.get('id', 'N/A')}")
+                    content = article.get('content', '')
+                    if content:
+                        preview = content[:150] + "..." if len(content) > 150 else content
+                        print(f"   📝 Anteprima: {preview}")
             
-            print(f"✅ Dati esportati in: {filename}")
-        
-        else:
-            print("❌ Scelta non valida")
+            elif choice == "3":
+                keyword = input("🔍 Inserisci parola chiave: ").strip()
+                if keyword:
+                    results = explorer.search_by_keyword(keyword)
+                    print(f"\n🔍 Risultati per '{keyword}':")
+                    print("-" * 30)
+                    
+                    if not results:
+                        print("❌ Nessun risultato trovato")
+                    else:
+                        for i, result in enumerate(results, 1):
+                            print(f"\n{i}. 📰 {result['metadata'].get('title', 'N/A')}")
+                            print(f"   🌐 {result['metadata'].get('source', 'N/A')}")
+                            print(f"   📝 {result['content']}")
+            
+            elif choice == "4":
+                stats = explorer.get_statistics()
+                if "domain_stats" in stats:
+                    domain = input(f"🏷️  Domini disponibili: {list(stats['domain_stats'].keys())}\nScegli dominio: ").strip()
+                    
+                    articles = explorer.get_all_articles(limit=100)
+                    domain_articles = [a for a in articles if a.get('domain') == domain]
+                    
+                    print(f"\n📰 Articoli per '{domain}' ({len(domain_articles)}):")
+                    print("-" * 40)
+                    
+                    for i, article in enumerate(domain_articles, 1):
+                        print(f"{i}. {article.get('title', 'N/A')}")
+            
+            elif choice == "5":
+                article_id = input("🆔 Inserisci ID articolo da eliminare: ").strip()
+                if article_id:
+                    confirm = input(f"⚠️  Sicuro di voler eliminare {article_id}? (y/N): ").strip().lower()
+                    if confirm == 'y':
+                        explorer.delete_article_by_id(article_id)
+            
+            elif choice == "6":
+                print("💾 Esportazione dati...")
+                articles = explorer.get_all_articles(limit=1000)
+                filename = f"database_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(articles, f, ensure_ascii=False, indent=2)
+                
+                print(f"✅ Dati esportati in: {filename}")
+            
+            else:
+                print("❌ Scelta non valida")
 
 if __name__ == "__main__":
     main()

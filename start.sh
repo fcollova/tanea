@@ -77,11 +77,11 @@ pip install --upgrade pip > /dev/null 2>&1
 
 # 4. Installa dipendenze
 print_status "Installazione dipendenze Python..."
-if [ -f "requirement.txt" ]; then
-    pip install -r requirement.txt
+if [ -f "requirements.txt" ]; then
+    pip install -r requirements.txt
     print_success "Dipendenze installate"
 else
-    print_error "File requirement.txt non trovato"
+    print_error "File requirements.txt non trovato"
     exit 1
 fi
 

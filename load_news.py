@@ -8,32 +8,49 @@ Evita duplicazioni e gestisce il caricamento incrementale
 
 import logging
 from datetime import datetime
-from news_vector_db import NewsVectorDB
-from config import NEWS_DOMAINS, VECTOR_DB_CONFIG, WEAVIATE_URL, TAVILY_API_KEY, EMBEDDING_MODEL
+from news_db_manager import NewsVectorDB
+from news_sources import NewsQuery
+from config import get_config, get_news_config, setup_logging
 
-# Configurazione logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configura logging dal sistema di configurazione
+setup_logging()
 logger = logging.getLogger(__name__)
 
 class NewsLoader:
     """Caricatore di notizie con controllo duplicati"""
     
     def __init__(self):
-        self.news_db = NewsVectorDB(
-            weaviate_url=WEAVIATE_URL,
-            tavily_api_key=TAVILY_API_KEY,
-            index_name=VECTOR_DB_CONFIG["index_name"],
-            embedding_model=EMBEDDING_MODEL
-        )
+        self.news_db = NewsVectorDB()
+        self.config = get_config()
+        
+        # Crea configurazioni domini dai file config
+        self.news_domains = self._create_news_domains()
+    
+    def _create_news_domains(self):
+        """Crea configurazioni domini dai file config"""
+        domains_config = self.config.get_section('domains')
+        news_config = get_news_config()
+        
+        domains = []
+        
+        # Crea domini dalle configurazioni
+        if 'calcio_keywords' in domains_config:
+            calcio_config = NewsQuery(
+                domain="calcio",
+                keywords=self.config.get('domains', 'calcio_keywords', [], list),
+                max_results=self.config.get('domains', 'calcio_max_results', 25, int),
+                time_range=news_config['default_time_range'],
+                language=news_config['default_language']
+            )
+            domains.append(calcio_config)
+        
+        return domains
     
     def get_existing_hashes(self):
         """Recupera gli hash dei contenuti già presenti nel database"""
         try:
             # Query per ottenere tutti gli hash esistenti
-            collection = self.news_db.weaviate_client.collections.get(self.news_db.index_name)
+            collection = self.news_db.weaviate_client.collections.get(self.news_db.vector_db_manager.index_name)
             
             # Cerca tutti i documenti e prendi solo gli hash
             response = collection.query.fetch_objects(
@@ -56,7 +73,7 @@ class NewsLoader:
     def load_news_incremental(self, domains=None):
         """Carica notizie evitando duplicati"""
         if domains is None:
-            domains = NEWS_DOMAINS
+            domains = self.news_domains
         
         logger.info(f"Inizio caricamento incrementale per {len(domains)} domini")
         
@@ -70,7 +87,13 @@ class NewsLoader:
             logger.info(f"Processando dominio: {domain_config.domain}")
             
             # Cerca nuove notizie
-            articles = self.news_db.search_news(domain_config)
+            articles = self.news_db.search_news(
+                domain_config.domain,
+                domain_config.keywords,
+                domain_config.max_results,
+                domain_config.language,
+                domain_config.time_range
+            )
             logger.info(f"Trovati {len(articles)} articoli da {domain_config.domain}")
             
             # Filtra articoli già esistenti
@@ -106,7 +129,7 @@ class NewsLoader:
     def get_database_stats(self):
         """Ottieni statistiche del database"""
         try:
-            collection = self.news_db.weaviate_client.collections.get(self.news_db.index_name)
+            collection = self.news_db.weaviate_client.collections.get(self.news_db.vector_db_manager.index_name)
             
             # Conta totale
             total = collection.aggregate.over_all(total_count=True).total_count
@@ -140,49 +163,63 @@ class NewsLoader:
             logger.info("Pulizia completata")
         except Exception as e:
             logger.error(f"Errore durante la pulizia: {e}")
+    
+    def close(self):
+        """Chiude le connessioni per evitare memory leaks"""
+        if hasattr(self, 'news_db'):
+            self.news_db.close()
+    
+    def __enter__(self):
+        """Support for context manager"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Cleanup when exiting context manager"""
+        self.close()
 
 def main():
     """Funzione principale per caricare notizie"""
     print("📰 News Loader - Caricamento notizie incrementale")
     print("=" * 60)
     
-    try:
-        # Inizializza il loader
-        loader = NewsLoader()
-        
-        # Mostra statistiche iniziali
-        print("\n📊 Statistiche database (prima del caricamento):")
-        stats_before = loader.get_database_stats()
-        if "error" not in stats_before:
-            print(f"  • Totale articoli: {stats_before['total_articles']}")
-            for domain, count in stats_before.get('by_domain', {}).items():
-                print(f"  • {domain}: {count} articoli")
-        else:
-            print(f"  • Errore: {stats_before['error']}")
-        
-        print("\n🔄 Avvio caricamento notizie...")
-        
-        # Carica notizie evitando duplicati
-        result = loader.load_news_incremental()
-        
-        print(f"\n✅ Caricamento completato!")
-        print(f"  • Nuovi articoli: {result['new_articles']}")
-        print(f"  • Duplicati saltati: {result['skipped_duplicates']}")
-        print(f"  • Totale processati: {result['total_processed']}")
-        
-        # Mostra statistiche finali
-        print("\n📊 Statistiche database (dopo il caricamento):")
-        stats_after = loader.get_database_stats()
-        if "error" not in stats_after:
-            print(f"  • Totale articoli: {stats_after['total_articles']}")
-            for domain, count in stats_after.get('by_domain', {}).items():
-                print(f"  • {domain}: {count} articoli")
-        
-        print(f"\n🎯 Il database è ora pronto per le ricerche!")
-        
-    except Exception as e:
-        logger.error(f"Errore durante il caricamento: {e}")
-        print(f"\n❌ Errore: {e}")
+    # Usa il context manager per gestire le connessioni automaticamente
+    with NewsLoader() as loader:
+        try:
+            # Mostra statistiche iniziali
+            print("\n📊 Statistiche database (prima del caricamento):")
+            stats_before = loader.get_database_stats()
+            if "error" not in stats_before:
+                print(f"  • Totale articoli: {stats_before['total_articles']}")
+                for domain, count in stats_before.get('by_domain', {}).items():
+                    print(f"  • {domain}: {count} articoli")
+            else:
+                print(f"  • Errore: {stats_before['error']}")
+            
+            print("\n🔄 Avvio caricamento notizie...")
+            
+            # Carica notizie evitando duplicati
+            result = loader.load_news_incremental()
+            
+            print(f"\n✅ Caricamento completato!")
+            print(f"  • Nuovi articoli: {result['new_articles']}")
+            print(f"  • Duplicati saltati: {result['skipped_duplicates']}")
+            print(f"  • Totale processati: {result['total_processed']}")
+            
+            # Mostra statistiche finali
+            print("\n📊 Statistiche database (dopo il caricamento):")
+            stats_after = loader.get_database_stats()
+            if "error" not in stats_after:
+                print(f"  • Totale articoli: {stats_after['total_articles']}")
+                for domain, count in stats_after.get('by_domain', {}).items():
+                    print(f"  • {domain}: {count} articoli")
+            
+            print(f"\n🎯 Il database è ora pronto per le ricerche!")
+            
+        except Exception as e:
+            logger.error(f"Errore durante il caricamento: {e}")
+            print(f"\n❌ Errore: {e}")
+    
+    # Le connessioni vengono chiuse automaticamente qui
 
 if __name__ == "__main__":
     main()
