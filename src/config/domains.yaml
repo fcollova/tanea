@@ -1,0 +1,103 @@
+# domains.yaml
+# Configurazione dei domini di notizie con nomi e keywords
+
+domains:
+  calcio:
+    name: "Calcio"
+    description: "Notizie sul calcio italiano e internazionale"
+    active: true
+    keywords:
+      - "Serie A"
+      - "calcio italiano"
+      - "Juventus"
+      - "Inter"
+      - "Milan"
+      - "Napoli"
+      - "Roma"
+      - "Lazio"
+      - "Atalanta"
+      - "Fiorentina"
+      - "campionato italiano"
+      - "classifica Serie A"
+      - "calciomercato"
+      - "risultati Serie A"
+      - "gol"
+      - "partite"
+      - "allenatori Serie A"
+      - "Champions League italiana"
+      - "Europa League italiana"
+      - "Coppa Italia"
+      - "FIFA Club World Cup"
+      - "Mondiale per Club"
+    max_results:
+      dev: 5
+      prod: 50
+    
+  tecnologia:
+    name: "Tecnologia"
+    description: "Notizie su tecnologia, AI e innovazione"
+    active: false
+    keywords:
+      - "intelligenza artificiale"
+      - "AI"
+      - "machine learning"
+      - "deep learning"
+      - "ChatGPT"
+      - "automazione"
+      - "robotica"
+      - "startup tecnologiche"
+      - "innovazione digitale"
+    max_results:
+      dev: 3
+      prod: 30
+      
+  finanza:
+    name: "Finanza"
+    description: "Notizie economiche e finanziarie"
+    active: false
+    keywords:
+      - "borsa italiana"
+      - "FTSE MIB"
+      - "investimenti"
+      - "economia italiana"
+      - "BCE"
+      - "inflazione"
+      - "mercati finanziari"
+      - "criptovalute"
+      - "Bitcoin"
+    max_results:
+      dev: 3
+      prod: 25
+      
+  salute:
+    name: "Salute"
+    description: "Notizie su medicina e salute pubblica"
+    active: false
+    keywords:
+      - "medicina"
+      - "ricerca medica"
+      - "farmaci"
+      - "vaccini"
+      - "salute pubblica"
+      - "COVID-19"
+      - "telemedicina"
+      - "biotecnologie"
+    max_results:
+      dev: 3
+      prod: 20
+      
+  ambiente:
+    name: "Ambiente"
+    description: "Notizie su ambiente e sostenibilità"
+    active: false
+    keywords:
+      - "cambiamenti climatici"
+      - "sostenibilità"
+      - "energie rinnovabili"
+      - "ambiente"
+      - "ecologia"
+      - "riscaldamento globale"
+      - "green economy"
+    max_results:
+      dev: 3
+      prod: 15

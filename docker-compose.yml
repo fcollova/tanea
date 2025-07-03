@@ -1,5 +1,4 @@
 # docker-compose.yml per Weaviate locale con Studio GUI
-version: '3.4'
 services:
   weaviate:
     command:

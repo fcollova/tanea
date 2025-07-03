@@ -1,13 +1,13 @@
 import os
-import logging
 from typing import Optional
 
 import weaviate
 from langchain_community.embeddings import FastEmbedEmbeddings
 
-from config import get_weaviate_config, get_embedding_config
+from .config import get_weaviate_config, get_embedding_config
+from .log import get_database_logger
 
-logger = logging.getLogger(__name__)
+logger = get_database_logger(__name__)
 
 class VectorDBManager:
     """

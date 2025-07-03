@@ -10,13 +10,15 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_weaviate import WeaviateVectorStore
 from langchain.schema import Document
 
-from vector_db_manager import VectorDBManager
-from news_sources import NewsQuery, NewsSourceManager, create_default_news_manager
-from config import get_config, get_news_config, get_scheduler_config, setup_logging
+from .vector_db_manager import VectorDBManager
+from .news_sources import NewsQuery, NewsSourceManager, create_default_news_manager
+from .config import get_config, get_news_config, get_scheduler_config, setup_logging
+from .domain_manager import DomainManager
 
 # Configura logging dalla configurazione
 setup_logging()
-logger = logging.getLogger(__name__)
+from .log import get_database_logger
+logger = get_database_logger(__name__)
 
 class NewsVectorDB:
     """
@@ -32,6 +34,7 @@ class NewsVectorDB:
         self._init_text_splitter()
         self._init_news_sources()
         self._init_vector_store()
+        self._init_domain_manager()
         
         # Cache per evitare duplicati
         self.processed_urls = set()
@@ -86,6 +89,11 @@ class NewsVectorDB:
         )
         logger.info("Vector store inizializzato")
     
+    def _init_domain_manager(self):
+        """Inizializza il gestore dei domini"""
+        self.domain_manager = DomainManager()
+        logger.info(f"Domain manager inizializzato con domini: {self.domain_manager.get_domain_list()}")
+    
     
     def _generate_content_hash(self, content: str) -> str:
         """Genera un hash del contenuto per evitare duplicati"""
@@ -112,26 +120,41 @@ class NewsVectorDB:
             # Converte gli articoli in formato compatibile
             search_results = []
             for article in articles:
+                # Assicurati che source sia sempre valorizzato
+                source_value = article.source
+                if not source_value or (isinstance(source_value, str) and source_value.strip() == ""):
+                    source_value = "Unknown Source"
+                    logger.warning(f"Articolo senza fonte rilevata: {article.title[:50]}... - Impostata come 'Unknown Source'")
+                
                 result = {
-                    'title': article.title,
-                    'content': article.content,
-                    'url': article.url,
+                    'title': article.title or '',
+                    'content': article.content or '',
+                    'url': article.url or '',
                     'score': article.score or 0.0,
                     'raw_content': article.raw_content or '',
-                    'source': article.source
+                    'source': source_value
                 }
                 search_results.append(result)
             
             # Processa i risultati
             processed_results = []
-            for result in search_results:
+            for i, result in enumerate(search_results):
                 if isinstance(result, dict):
+                    # Determina una fonte di fallback se mancante
+                    source_value = result.get("source")
+                    if not source_value or source_value.strip() == "":
+                        # Usa la fonte dell'articolo originale o un fallback generico
+                        if i < len(articles) and articles[i].source:
+                            source_value = articles[i].source
+                        else:
+                            source_value = "Unknown Source"
+                    
                     processed_result = {
                         "title": result.get("title", ""),
                         "content": result.get("content", ""),
                         "url": result.get("url", ""),
-                        "source": result.get("source", ""),
-                        "published_date": result.get("published_date", datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")),
+                        "source": source_value,
+                        "published_date": result.get("published_date") or (articles[i].published_date.isoformat() if i < len(articles) and articles[i].published_date else datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")),
                         "domain": domain,
                         "keywords": keywords
                     }
@@ -207,16 +230,41 @@ class NewsVectorDB:
             logger.error(f"Errore nell'aggiunta delle notizie al database: {e}")
             return 0
     
-    def update_football_news(self) -> int:
-        """Aggiorna le notizie di calcio Serie A"""
-        logger.info("Aggiornamento notizie calcio Serie A...")
+    def update_domain_news(self, domain_id: str, force_inactive: bool = False) -> int:
+        """Aggiorna le notizie per un dominio specifico"""
+        domain_config = self.domain_manager.get_domain(domain_id)
+        if not domain_config:
+            logger.error(f"Dominio {domain_id} non trovato")
+            return 0
+        
+        # Verifica se il dominio è attivo
+        if not domain_config.active and not force_inactive:
+            logger.warning(f"Dominio {domain_id} ({domain_config.name}) è disattivato - skipping")
+            return 0
+        
+        environment = getattr(self.config, 'environment', 'dev')
+        max_results = self.domain_manager.get_max_results(domain_id, environment)
+        
+        logger.info(f"Aggiornamento notizie per dominio {domain_config.name}...")
         return self.add_news_to_db(
-            domain="calcio Serie A",
-            keywords=["Inter", "Milan", "Juventus", "Napoli", "Roma", "Lazio", "Atalanta", "Fiorentina"],
-            max_results=20,
+            domain=domain_id,
+            keywords=domain_config.keywords,
+            max_results=max_results,
             language="it",
             time_range="1d"
         )
+    
+    def update_all_domains(self, active_only: bool = True) -> Dict[str, int]:
+        """Aggiorna le notizie per tutti i domini configurati"""
+        results = {}
+        for domain_id in self.domain_manager.get_domain_list(active_only=active_only):
+            results[domain_id] = self.update_domain_news(domain_id)
+        return results
+    
+    def update_football_news(self) -> int:
+        """Aggiorna le notizie di calcio Serie A (compatibility method)"""
+        logger.info("Aggiornamento notizie calcio Serie A...")
+        return self.update_domain_news("calcio")
     
     def search_relevant_context(self, question: str, k: int = 5) -> List[Document]:
         """Cerca il contesto più rilevante per una domanda"""
@@ -275,9 +323,9 @@ Contenuto: {doc.page_content}
                 }
             }
             
-            # Elimina gli articoli vecchi
-            result = self.weaviate_client.batch.delete_objects(
-                class_name=self.index_name,
+            # Elimina gli articoli vecchi usando Weaviate v4
+            collection = self.weaviate_client.collections.get(self.vector_db_manager.index_name)
+            result = collection.data.delete_many(
                 where=query["where"]
             )
             

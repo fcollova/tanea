@@ -6,6 +6,6 @@
 echo "🚀 Quick News Loader..."
 
 # Attiva venv e esegue load_news.py
-source venv/bin/activate && python load_news.py
+source venv/bin/activate && python src/scripts/load_news.py
 
 echo "✅ Fatto!"

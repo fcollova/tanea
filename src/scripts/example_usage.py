@@ -6,14 +6,22 @@ Esempio di utilizzo del News Vector DB
 
 import asyncio
 import logging
+import sys
+import os
 from datetime import datetime
-from news_db_manager import NewsVectorDB
-from news_sources import NewsQuery
-from config import get_config, get_weaviate_config, get_search_config, get_news_config, setup_logging
+
+# Aggiungi il percorso del modulo src al path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from core.news_db_manager import NewsVectorDB
+from core.news_sources import NewsQuery
+from core.config import get_config, get_weaviate_config, get_search_config, get_news_config, setup_logging
+from core.domain_manager import DomainManager
 
 # Configura logging dal sistema di configurazione
 setup_logging()
-logger = logging.getLogger(__name__)
+from core.log import get_scripts_logger
+logger = get_scripts_logger(__name__)
 
 class NewsQASystem:
     """Sistema di Q&A basato sulle notizie"""
@@ -22,7 +30,10 @@ class NewsQASystem:
         self.news_db = NewsVectorDB()
         self.config = get_config()
         
-        # Crea configurazioni domini dai file config
+        # Inizializza domain manager
+        self.domain_manager = DomainManager()
+        
+        # Crea configurazioni domini dal domain manager
         self.news_domains = self._create_news_domains()
     
     def close(self):
@@ -39,22 +50,25 @@ class NewsQASystem:
         self.close()
     
     def _create_news_domains(self):
-        """Crea configurazioni domini dai file config"""
-        domains_config = self.config.get_section('domains')
+        """Crea configurazioni domini dal domain manager"""
         news_config = get_news_config()
+        environment = getattr(self.config, 'environment', 'dev')
         
         domains = []
         
-        # Solo calcio per ora, seguendo il pattern della configurazione originale
-        if 'calcio_keywords' in domains_config:
-            calcio_config = NewsQuery(
-                domain="calcio",
-                keywords=self.config.get('domains', 'calcio_keywords', [], list),
-                max_results=self.config.get('domains', 'calcio_max_results', 25, int),
-                time_range=news_config['default_time_range'],
-                language=news_config['default_language']
-            )
-            domains.append(calcio_config)
+        # Crea configurazione per ogni dominio attivo dal domain manager
+        for domain_id in self.domain_manager.get_domain_list(active_only=True):
+            domain_config_obj = self.domain_manager.get_domain(domain_id)
+            if domain_config_obj and domain_config_obj.active:
+                domain_config = NewsQuery(
+                    domain=domain_id,
+                    keywords=domain_config_obj.keywords,
+                    max_results=self.domain_manager.get_max_results(domain_id, environment),
+                    time_range=news_config['default_time_range'],
+                    language=news_config['default_language']
+                )
+                domains.append(domain_config)
+                logger.info(f"Configurato dominio attivo: {domain_config_obj.name} ({domain_id})")
         
         return domains
     
@@ -108,35 +122,19 @@ class NewsQASystem:
     def get_domain_statistics(self) -> dict:
         """Ottieni statistiche sui domini nel database"""
         try:
-            # Query per ottenere statistiche per dominio
-            # Usa il nome index dalla configurazione
-            weaviate_config = get_weaviate_config()
-            index_name = weaviate_config['index_name']
+            # Usa Weaviate v4 API per le statistiche
+            collection = self.news_db.weaviate_client.collections.get(self.news_db.vector_db_manager.index_name)
             
-            query = f"""
-            {{
-              Aggregate {{
-                {index_name}(groupBy: ["domain"]) {{
-                  groupedBy {{
-                    value
-                  }}
-                  meta {{
-                    count
-                  }}
-                }}
-              }}
-            }}
-            """
+            # Recupera tutti i documenti per analizzare i domini
+            response = collection.query.fetch_objects(
+                return_properties=["domain"],
+                limit=10000
+            )
             
-            result = self.news_db.weaviate_client.graphql_raw_query(query)
             stats = {}
-            
-            if result and "data" in result:
-                groups = result["data"]["Aggregate"][index_name]
-                for group in groups:
-                    domain = group["groupedBy"]["value"]
-                    count = group["meta"]["count"]
-                    stats[domain] = count
+            for obj in response.objects:
+                domain = obj.properties.get("domain", "Unknown")
+                stats[domain] = stats.get(domain, 0) + 1
             
             return stats
             

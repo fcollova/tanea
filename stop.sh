@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script per fermare il News Vector DB System
+# Script per fermare solo Weaviate Vector DB
 
 # Colori per output
 RED='\033[0;31m'
@@ -18,7 +18,7 @@ print_success() {
 
 echo -e "${RED}"
 echo "============================================="
-echo "      News Vector DB System Shutdown       "
+echo "       Weaviate Vector DB Shutdown         "
 echo "============================================="
 echo -e "${NC}"
 
@@ -26,10 +26,4 @@ echo -e "${NC}"
 print_status "Fermando Weaviate database..."
 docker-compose down
 
-# Disattiva virtual environment se attivo
-if [[ "$VIRTUAL_ENV" != "" ]]; then
-    print_status "Disattivazione virtual environment..."
-    deactivate 2>/dev/null || true
-fi
-
-print_success "Sistema fermato completamente"
+print_success "Weaviate Vector DB fermato completamente"

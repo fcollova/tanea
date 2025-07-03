@@ -1,9 +1,10 @@
 import os
+import logging
 import configparser
 from typing import Dict, Any, Optional, Union
-import logging
 
-logger = logging.getLogger(__name__)
+# Logger - usa naming convention centralizzata direttamente
+logger = logging.getLogger('tanea.config.core.config')
 
 class Config:
     """
@@ -35,16 +36,18 @@ class Config:
         ]
         
         loaded_files = []
+        config_dir = os.path.join(os.path.dirname(__file__), '..', 'config')
         for config_file in config_files:
-            if os.path.exists(config_file):
+            config_path = os.path.join(config_dir, config_file)
+            if os.path.exists(config_path):
                 try:
-                    self.config.read(config_file, encoding='utf-8')
+                    self.config.read(config_path, encoding='utf-8')
                     loaded_files.append(config_file)
                     logger.info(f"Caricato file di configurazione: {config_file}")
                 except Exception as e:
                     logger.error(f"Errore nel caricamento di {config_file}: {e}")
             else:
-                logger.warning(f"File di configurazione non trovato: {config_file}")
+                logger.warning(f"File di configurazione non trovato: {config_path}")
         
         if not loaded_files:
             logger.warning("Nessun file di configurazione caricato")
@@ -149,6 +152,7 @@ class Config:
         """Ottiene la configurazione per la ricerca"""
         return {
             'tavily_api_key': self.get('search', 'tavily_api_key'),
+            'newsapi_api_key': self.get('search', 'newsapi_api_key'),
             'max_results': self.get('search', 'max_results', 10, int),
             'search_depth': self.get('search', 'search_depth', 'advanced'),
             'include_answer': self.get('search', 'include_answer', True, bool),
@@ -163,16 +167,6 @@ class Config:
             'max_results': self.get('news', 'max_results', 10, int),
             'chunk_size': self.get('news', 'chunk_size', 1000, int),
             'chunk_overlap': self.get('news', 'chunk_overlap', 200, int)
-        }
-    
-    def get_logging_config(self) -> Dict[str, Any]:
-        """Ottiene la configurazione del logging"""
-        return {
-            'level': self.get('logging', 'level', 'INFO'),
-            'format': self.get('logging', 'format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s'),
-            'file': self.get('logging', 'file'),
-            'max_bytes': self.get('logging', 'max_bytes', 10485760, int),  # 10MB
-            'backup_count': self.get('logging', 'backup_count', 5, int)
         }
     
     def get_scheduler_config(self) -> Dict[str, Any]:
@@ -230,48 +224,39 @@ def get_news_config() -> Dict[str, Any]:
     """Accesso rapido alla configurazione notizie"""
     return get_config().get_news_config()
 
-def get_logging_config() -> Dict[str, Any]:
-    """Accesso rapido alla configurazione logging"""
-    return get_config().get_logging_config()
-
 def get_scheduler_config() -> Dict[str, Any]:
     """Accesso rapido alla configurazione scheduler"""
     return get_config().get_scheduler_config()
 
 # Funzione per configurare il logging basato sulla configurazione
 def setup_logging():
-    """Configura il logging basato sui parametri di configurazione"""
-    config = get_logging_config()
+    """
+    Configura il logging basato sui parametri di configurazione.
+    Se il nuovo sistema centralizzato è disponibile, viene usato quello.
+    Altrimenti fallback al sistema legacy.
+    """
+    try:
+        # Prova a usare il nuovo sistema centralizzato
+        from .log import LoggerManager, _configure_main_functionality_loggers
+        # Il LoggerManager si auto-inizializza, quindi basta importarlo
+        
+        # Configura livelli per funzionalità principali
+        _configure_main_functionality_loggers()
+        
+        logger.info("Logging configurato tramite sistema centralizzato")
+        return
+    except ImportError:
+        # Fallback al sistema legacy se il nuovo non è disponibile
+        pass
     
-    # Configura il formato
-    formatter = logging.Formatter(config['format'])
-    
-    # Configura il livello
-    level = getattr(logging, config['level'].upper(), logging.INFO)
-    
-    # Configura il root logger
+    # Sistema legacy fallback minimale
     root_logger = logging.getLogger()
-    root_logger.setLevel(level)
+    if not root_logger.handlers:
+        # Solo se non ci sono handler, aggiungi console handler minimale
+        console_handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        console_handler.setFormatter(formatter)
+        root_logger.addHandler(console_handler)
+        root_logger.setLevel(logging.INFO)
     
-    # Rimuovi handler esistenti
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
-    
-    # Aggiungi console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    root_logger.addHandler(console_handler)
-    
-    # Aggiungi file handler se specificato
-    if config['file']:
-        try:
-            from logging.handlers import RotatingFileHandler
-            file_handler = RotatingFileHandler(
-                config['file'],
-                maxBytes=config['max_bytes'],
-                backupCount=config['backup_count']
-            )
-            file_handler.setFormatter(formatter)
-            root_logger.addHandler(file_handler)
-        except Exception as e:
-            logger.error(f"Errore nella configurazione del file logging: {e}")
+    logger.info("Logging configurato (legacy fallback)")

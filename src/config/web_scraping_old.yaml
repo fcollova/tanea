@@ -1,0 +1,367 @@
+# ============================================================================
+# Web Scraping Configuration - Fonti italiane per news scraping
+# ============================================================================
+
+# Configurazione generale
+general:
+  rate_limit_delay: 3.0     # Secondi tra richieste (rispettoso)
+  timeout: 20               # Timeout richieste
+  max_retries: 2            # Numero di retry
+  max_articles_per_site: 10 # Limite articoli per sito
+  respect_robots_txt: true  # Rispetta robots.txt
+  
+# Headers HTTP standard
+headers:
+  User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+  Accept-Language: "it-IT,it;q=0.9,en;q=0.8"
+  Accept-Encoding: "gzip, deflate, br"
+  DNT: "1"
+  Connection: "keep-alive"
+  Upgrade-Insecure-Requests: "1"
+
+# Configurazione siti per scraping
+sites:
+  
+  # === ANSA ===
+  ansa:
+    name: "ANSA"
+    base_url: "https://www.ansa.it"
+    priority: 2
+    rate_limit_delay: 4.0  # Più conservativo per ANSA
+    
+    # Pagine di categoria
+    categories:
+      general:
+        url: "https://www.ansa.it/sito/notizie/topnews/"
+        selectors:
+          article_links: "article.news h3 a"
+          
+      sport:
+        url: "https://www.ansa.it/sito/notizie/sport/"
+        selectors:
+          article_links: "article.news h3 a"
+          
+      calcio:
+        url: "https://www.ansa.it/sito/notizie/sport/calcio/"
+        selectors:
+          article_links: "article.news h3 a"
+    
+    # Selettori per articolo singolo
+    article_selectors:
+      title: "h1.news-title, h1"
+      content: ".news-txt, .articolo-contenuto, .news-body"
+      date: "time[datetime], .news-date"
+      author: ".news-author, .author"
+      
+    # Pattern da rimuovere dal contenuto
+    cleanup_patterns:
+      - "\\(ANSA\\)"
+      - "Riproduzione riservata"
+      - "Tutti i diritti riservati"
+
+  # === CORRIERE DELLA SERA ===
+  corriere:
+    name: "Corriere della Sera"
+    base_url: "https://www.corriere.it"
+    priority: 2
+    rate_limit_delay: 3.0
+    
+    categories:
+      general:
+        url: "https://www.corriere.it/"
+        selectors:
+          article_links: ".media-news__link, .title-art a"
+          
+      sport:
+        url: "https://www.corriere.it/sport/"
+        selectors:
+          article_links: ".media-news__link, .title-art a"
+          
+      economia:
+        url: "https://www.corriere.it/economia/"
+        selectors:
+          article_links: ".media-news__link, .title-art a"
+    
+    article_selectors:
+      title: "h1, .title-art"
+      content: ".story_content, .chapter-paragraph"
+      date: "time[datetime], .data-publish"
+      author: ".signature-author, .author"
+      
+    cleanup_patterns:
+      - "© RIPRODUZIONE RISERVATA"
+      - "Corriere della Sera"
+
+  # === LA REPUBBLICA ===
+  repubblica:
+    name: "La Repubblica"
+    base_url: "https://www.repubblica.it"
+    priority: 2
+    rate_limit_delay: 3.0
+    
+    categories:
+      general:
+        url: "https://www.repubblica.it/"
+        selectors:
+          article_links: ".entry__title a, .story__title a"
+          
+      sport:
+        url: "https://www.repubblica.it/sport/"
+        selectors:
+          article_links: ".entry__title a, .story__title a"
+          
+      tecnologia:
+        url: "https://www.repubblica.it/tecnologia/"
+        selectors:
+          article_links: ".entry__title a, .story__title a"
+    
+    article_selectors:
+      title: "h1, .entry__title"
+      content: ".story__text, .entry__text"
+      date: "time[datetime], .entry__date"
+      author: ".entry__author, .author"
+      
+    cleanup_patterns:
+      - "© Riproduzione riservata"
+      - "La Repubblica"
+
+  # === GAZZETTA DELLO SPORT ===
+  gazzetta:
+    name: "Gazzetta dello Sport"
+    base_url: "https://www.gazzetta.it"
+    priority: 1  # Alta priorità per sport
+    rate_limit_delay: 2.0
+    
+    categories:
+      sport:
+        url: "https://www.gazzetta.it/"
+        selectors:
+          article_links: ".gzc-article-title a, .main-news a"
+          
+      calcio:
+        url: "https://www.gazzetta.it/Calcio/"
+        selectors:
+          article_links: ".gzc-article-title a, .main-news a"
+          
+      serie_a:
+        url: "https://www.gazzetta.it/Calcio/Serie-A/"
+        selectors:
+          article_links: ".gzc-article-title a, .main-news a"
+    
+    article_selectors:
+      title: "h1, .article-title"
+      content: ".article-content, .gzc-article-text"
+      date: "time[datetime], .article-date"
+      author: ".article-author, .signature"
+      
+    cleanup_patterns:
+      - "© RIPRODUZIONE RISERVATA"
+      - "Gazzetta dello Sport"
+
+  # === CORRIERE DELLO SPORT ===
+  corriere_sport:
+    name: "Corriere dello Sport"
+    base_url: "https://www.corrieredellosport.it"
+    priority: 1
+    rate_limit_delay: 3.0
+    
+    categories:
+      sport:
+        url: "https://www.corrieredellosport.it/"
+        selectors:
+          article_links: ".article-title a, .news-title a"
+          
+      calcio:
+        url: "https://www.corrieredellosport.it/news/calcio/"
+        selectors:
+          article_links: ".article-title a, .news-title a"
+    
+    article_selectors:
+      title: "h1, .article-title"
+      content: ".article-text, .news-content"
+      date: "time[datetime], .article-date"
+      author: ".article-author"
+      
+    cleanup_patterns:
+      - "© Corriere dello Sport"
+      - "Tutti i diritti riservati"
+
+  # === TUTTOMERCATOWEB ===
+  tuttomercatoweb:
+    name: "Tuttomercatoweb"
+    base_url: "https://www.tuttomercatoweb.com"
+    priority: 1
+    rate_limit_delay: 3.0
+    
+    categories:
+      calcio:
+        url: "https://www.tuttomercatoweb.com/"
+        selectors:
+          article_links: ".article-title a, .news-title a"
+          
+      serie_a:
+        url: "https://www.tuttomercatoweb.com/serie-a/"
+        selectors:
+          article_links: ".article-title a, .news-title a"
+          
+      calciomercato:
+        url: "https://www.tuttomercatoweb.com/calciomercato/"
+        selectors:
+          article_links: ".article-title a, .news-title a"
+    
+    article_selectors:
+      title: "h1, .article-title"
+      content: ".article-text, .news-content"
+      date: "time[datetime], .article-date"
+      author: ".article-author"
+      
+    cleanup_patterns:
+      - "© Tuttomercatoweb"
+      - "Tutti i diritti riservati"
+
+  # === CALCIOMERCATO.COM ===
+  calciomercato:
+    name: "CalcioMercato.com"
+    base_url: "https://www.calciomercato.com"
+    priority: 1
+    rate_limit_delay: 3.0
+    
+    categories:
+      calcio:
+        url: "https://www.calciomercato.com/"
+        selectors:
+          article_links: ".article-title a, .news-title a"
+          
+      serie_a:
+        url: "https://www.calciomercato.com/serie-a/"
+        selectors:
+          article_links: ".article-title a, .news-title a"
+          
+      calciomercato:
+        url: "https://www.calciomercato.com/mercato/"
+        selectors:
+          article_links: ".article-title a, .news-title a"
+    
+    article_selectors:
+      title: "h1, .article-title"
+      content: ".article-text, .news-content"
+      date: "time[datetime], .article-date"
+      author: ".article-author"
+      
+    cleanup_patterns:
+      - "© CalcioMercato.com"
+      - "Tutti i diritti riservati"
+
+  # === ANSA SPORT ===
+  ansa_sport:
+    name: "ANSA Sport"
+    base_url: "https://www.ansa.it"
+    priority: 2
+    rate_limit_delay: 4.0
+    
+    categories:
+      sport:
+        url: "https://www.ansa.it/sito/notizie/sport/"
+        selectors:
+          article_links: "article.news h3 a"
+          
+      calcio:
+        url: "https://www.ansa.it/sito/notizie/sport/calcio/"
+        selectors:
+          article_links: "article.news h3 a"
+          
+      serie_a:
+        url: "https://www.ansa.it/sito/notizie/sport/calcio/serie-a/"
+        selectors:
+          article_links: "article.news h3 a"
+    
+    article_selectors:
+      title: "h1.news-title, h1"
+      content: ".news-txt, .articolo-contenuto, .news-body"
+      date: "time[datetime], .news-date"
+      author: ".news-author, .author"
+      
+    cleanup_patterns:
+      - "\\(ANSA\\)"
+      - "Riproduzione riservata"
+      - "Tutti i diritti riservati"
+
+  # === IL SOLE 24 ORE ===
+  sole24ore:
+    name: "Il Sole 24 Ore"
+    base_url: "https://www.ilsole24ore.com"
+    priority: 1  # Alta priorità per economia
+    rate_limit_delay: 4.0  # Rispettoso per sito economico
+    
+    categories:
+      economia:
+        url: "https://www.ilsole24ore.com/sez/economia"
+        selectors:
+          article_links: ".article-title a, .headline a"
+          
+      finanza:
+        url: "https://www.ilsole24ore.com/sez/finanza"
+        selectors:
+          article_links: ".article-title a, .headline a"
+          
+      general:
+        url: "https://www.ilsole24ore.com/"
+        selectors:
+          article_links: ".article-title a, .headline a"
+    
+    article_selectors:
+      title: "h1, .article-title"
+      content: ".article-body, .content-text"
+      date: "time[datetime], .article-date"
+      author: ".article-author, .byline"
+      
+    cleanup_patterns:
+      - "© RIPRODUZIONE RISERVATA"
+      - "Il Sole 24 Ore"
+
+# Mapping domini → siti preferiti
+domain_mapping:
+  calcio: ["gazzetta", "corriere_sport", "tuttomercatoweb", "calciomercato", "ansa_sport"]
+  sport: ["gazzetta", "corriere_sport", "tuttomercatoweb", "calciomercato", "ansa_sport", "corriere", "repubblica"]
+  economia: ["sole24ore", "corriere", "repubblica", "ansa"]
+  finanza: ["sole24ore", "corriere", "ansa"]
+  tecnologia: ["repubblica", "corriere", "ansa"]
+  general: ["ansa", "corriere", "repubblica", "sole24ore"]
+
+# Filtri globali
+content_filters:
+  # Lunghezza minima articolo
+  min_content_length: 100
+  
+  # Lunghezza massima per evitare articoli troppo lunghi
+  max_content_length: 10000
+  
+  # Pattern da rimuovere da tutti gli articoli
+  global_cleanup_patterns:
+    - "\\n\\s*\\n"  # Righe vuote multiple
+    - "\\s+"        # Spazi multipli
+    - "^\\s+|\\s+$" # Spazi iniziali/finali
+    
+  # Titoli da saltare (case insensitive)
+  skip_titles:
+    - "404"
+    - "errore"
+    - "pagina non trovata"
+    - "accesso negato"
+    - "cookie policy"
+    - "privacy policy"
+
+# Configurazioni di sicurezza
+security:
+  # Rispetta delay minimi anche se configurati più bassi
+  min_delay: 1.0
+  
+  # Timeout massimo assoluto
+  max_timeout: 30
+  
+  # User agents alternativi per rotazione
+  user_agents:
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+    - "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"

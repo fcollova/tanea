@@ -1,0 +1,221 @@
+# ============================================================================
+# RSS Feeds Configuration - Fonti italiane per news
+# ============================================================================
+
+# Configurazione generale
+general:
+  rate_limit_delay: 2.0  # Secondi tra richieste
+  timeout: 15           # Timeout richieste
+  max_retries: 3        # Numero di retry
+  
+# Feed RSS organizzati per categoria
+feeds:
+  
+  # === NOTIZIE GENERALI ===
+  general:
+    - name: "ANSA - Top News"
+      url: "https://www.ansa.it/sito/notizie/topnews/topnews_rss.xml"
+      source: "ANSA"
+      priority: 1
+      description: "Notizie principali ANSA"
+      
+    - name: "Corriere della Sera - Homepage"
+      url: "https://www.corriere.it/rss/homepage.xml"
+      source: "Corriere della Sera"
+      priority: 1
+      description: "Prima pagina Corriere"
+      
+    - name: "La Repubblica - Homepage"
+      url: "https://www.repubblica.it/rss/homepage/rss2.0.xml"
+      source: "La Repubblica"
+      priority: 1
+      description: "Prima pagina Repubblica"
+      
+    - name: "Il Sole 24 Ore - Notizie"
+      url: "https://www.ilsole24ore.com/rss/notizie.xml"
+      source: "Il Sole 24 Ore"
+      priority: 1
+      description: "Notizie economiche e generali"
+
+  # === SALUTE ===
+  salute:
+    - name: "ANSA - Salute"
+      url: "https://www.ansa.it/canale_saluteebenessere/notizie/rss.xml"
+      source: "ANSA"
+      priority: 1
+      description: "Notizie sulla salute"
+      
+    - name: "Corriere - Salute"
+      url: "https://www.corriere.it/rss/salute.xml"
+      source: "Corriere della Sera"
+      priority: 1
+      description: "Salute e benessere"
+      
+    - name: "Repubblica - Salute"
+      url: "https://www.repubblica.it/rss/medicina/rss2.0.xml"
+      source: "La Repubblica"
+      priority: 2
+      description: "Medicina e salute"
+
+  # === AMBIENTE ===
+  ambiente:
+    - name: "ANSA - Ambiente"
+      url: "https://www.ansa.it/canale_ambiente/notizie/rss.xml"
+      source: "ANSA"
+      priority: 1
+      description: "Notizie sull'ambiente"
+      
+    - name: "Corriere - Ambiente"
+      url: "https://www.corriere.it/rss/ambiente.xml"
+      source: "Corriere della Sera"
+      priority: 1
+      description: "Ambiente e sostenibilità"
+      
+    - name: "Repubblica - Ambiente"
+      url: "https://www.repubblica.it/rss/ambiente/rss2.0.xml"
+      source: "La Repubblica"
+      priority: 2
+      description: "Ambiente e clima"
+
+  # === SPORT (legacy per supporto categorie web scraping) ===
+  sport:
+    - name: "ANSA - Sport"
+      url: "https://www.ansa.it/sito/notizie/sport/sport_rss.xml"
+      source: "ANSA Sport"
+      priority: 1
+      description: "Notizie sportive ANSA"
+      
+    - name: "Gazzetta dello Sport - Home"
+      url: "https://www.gazzetta.it/rss/home.xml"
+      source: "Gazzetta dello Sport"
+      priority: 1
+      description: "Prima pagina Gazzetta"
+      
+    - name: "Corriere dello Sport"
+      url: "https://www.corrieredellosport.it/rss"
+      source: "Corriere dello Sport"
+      priority: 1
+      description: "Notizie sportive CdS"
+      
+    - name: "Sky Sport"
+      url: "https://www.skysport.it/rss/sport.xml"
+      source: "Sky Sport"
+      priority: 2
+      description: "Notizie Sky Sport"
+      
+    - name: "Tuttosport"
+      url: "https://www.tuttosport.com/rss"
+      source: "Tuttosport"
+      priority: 2
+      description: "Notizie Tuttosport"
+
+  # === CALCIO ===
+  calcio:
+    - name: "Gazzetta - Calcio"
+      url: "https://www.gazzetta.it/rss/calcio.xml"
+      source: "Gazzetta dello Sport"
+      priority: 1
+      description: "Calcio Gazzetta dello Sport"
+      
+    - name: "Corriere dello Sport - Calcio"
+      url: "https://www.corrieredellosport.it/rss/calcio.xml"
+      source: "Corriere dello Sport"
+      priority: 1
+      description: "Calcio Corriere dello Sport"
+      
+    - name: "Goal Italia"
+      url: "https://www.goal.com/it/feeds/news"
+      source: "Goal.com"
+      priority: 2
+      description: "Notizie calcio Goal.com"
+      
+    - name: "CalcioMercato"
+      url: "https://www.calciomercato.com/rss"
+      source: "CalcioMercato.com"
+      priority: 2
+      description: "Mercato e notizie calcio"
+      
+    - name: "Football Italia"
+      url: "https://www.football-italia.net/rss.xml"
+      source: "Football Italia"
+      priority: 3
+      description: "Calcio italiano in inglese"
+      
+    - name: "Serie A News"
+      url: "https://www.legaseriea.it/it/rss"
+      source: "Lega Serie A"
+      priority: 1
+      description: "Notizie ufficiali Serie A"
+
+  # === ECONOMIA E FINANZA ===
+  economia:
+    - name: "Il Sole 24 Ore - Economia"
+      url: "https://www.ilsole24ore.com/rss/economia.xml"
+      source: "Il Sole 24 Ore"
+      priority: 1
+      description: "Notizie economia italiana"
+      
+    - name: "ANSA - Economia"
+      url: "https://www.ansa.it/sito/notizie/economia/economia_rss.xml"
+      source: "ANSA"
+      priority: 1
+      description: "Economia ANSA"
+      
+    - name: "Milano Finanza"
+      url: "https://www.milanofinanza.it/rss"
+      source: "Milano Finanza"
+      priority: 2
+      description: "Finanza e mercati"
+      
+    - name: "Borsa Italiana"
+      url: "https://www.borsaitaliana.it/rss/notizie.xml"
+      source: "Borsa Italiana"
+      priority: 2
+      description: "Notizie mercati finanziari"
+
+  # === TECNOLOGIA ===
+  tecnologia:
+    - name: "ANSA - Tecnologia"
+      url: "https://www.ansa.it/sito/notizie/tecnologie/tecnologie_rss.xml"
+      source: "ANSA"
+      priority: 1
+      description: "Tecnologia ANSA"
+      
+    - name: "La Repubblica - Tecnologia"
+      url: "https://www.repubblica.it/rss/tecnologia/rss2.0.xml"
+      source: "La Repubblica"
+      priority: 1
+      description: "Tecnologia Repubblica"
+      
+    - name: "Corriere - Tecnologia"
+      url: "https://www.corriere.it/rss/tecnologia.xml"
+      source: "Corriere della Sera"
+      priority: 1
+      description: "Tecnologia Corriere"
+
+# Configurazioni specifiche per dominio (basato su domains.yaml)
+domain_mapping:
+  calcio: ["calcio", "sport"]
+  tecnologia: ["tecnologia"]
+  finanza: ["economia"]
+  salute: ["general"]
+  ambiente: ["general"]
+
+# Filtri e pulizia contenuti
+content_filters:
+  # Rimuovi questi pattern dal contenuto
+  remove_patterns:
+    - "Leggi tutto"
+    - "Continua a leggere"
+    - "Clicca qui"
+    - "ANSA"
+    - "(ANSA)"
+  
+  # Lunghezza minima articolo (caratteri)
+  min_content_length: 50
+  
+  # Titoli da ignorare
+  skip_titles:
+    - "RSS"
+    - "Feed"
+    - "Errore"

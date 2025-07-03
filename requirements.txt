@@ -21,6 +21,7 @@ tavily-python>=0.3.0
 # === UTILITIES ===
 # Web UI for exploration
 streamlit>=1.30.0
+altair<5.5.0  # Fix for Streamlit compatibility
 
 # Task scheduling
 schedule>=1.2.0
@@ -30,6 +31,18 @@ python-dotenv>=1.0.0
 
 # HTTP requests
 requests>=2.31.0
+
+# RSS feed parsing
+feedparser>=6.0.0
+
+# HTML parsing
+beautifulsoup4>=4.12.0
+
+# YAML parsing
+PyYAML>=6.0.0
+
+# Date parsing
+python-dateutil>=2.8.0
 
 # Data visualization
 pandas>=2.0.0
