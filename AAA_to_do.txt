@@ -1,0 +1,5 @@
+Questa implementazione è parziamente corretta perchè hai riportato le informazioni dei domini all'interno di 
+web_scraping.yaml. In web_scraping.yaml deve esserci oltre alle fonti il mapping delle fonti con i domini. Se il
+dominio è attivo viene verificato solo in domains.yaml. La logica del dominio è gestita nel modulo che gestisce
+il dominio credo news_db_manager.py. Le fonti che sono relative allo scraping vanno destite nei moduli che fanno
+scraping webscraping e trafilatura

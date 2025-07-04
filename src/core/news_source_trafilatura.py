@@ -141,14 +141,28 @@ class TrafilaturaWebScrapingSource(NewsSource):
         }
     
     def is_available(self) -> bool:
-        """Trafilatura disponibile se installata"""
-        return TRAFILATURA_AVAILABLE
+        """Trafilatura disponibile se installata e almeno una fonte attiva"""
+        if not TRAFILATURA_AVAILABLE:
+            return False
+        
+        if not self.scraping_config:
+            return False
+        
+        # Controlla se c'è almeno una fonte attiva
+        sites = self.scraping_config.get('sites', {})
+        for site_name, site_config in sites.items():
+            if site_config.get('active', True):
+                return True
+        
+        return False
+    
     
     def search_news(self, query: NewsQuery) -> List[NewsArticle]:
         """Cerca notizie usando trafilatura - molto più semplice e robusto"""
         if not self.is_available():
             self.logger.warning("Trafilatura non disponibile")
             return []
+        
             
         try:
             # Espandi keywords per il dominio
@@ -521,6 +535,12 @@ class TrafilaturaWebScrapingSource(NewsSource):
         for site_name in preferred_sites:
             if site_name in sites_config:
                 site_config = sites_config[site_name].copy()
+                
+                # Controlla se la fonte è attiva
+                if not site_config.get('active', True):
+                    self.logger.debug(f"Sito {site_name} disattivato (active: false)")
+                    continue
+                
                 site_config['site_key'] = site_name
                 selected_sites.append(site_config)
         

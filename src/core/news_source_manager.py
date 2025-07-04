@@ -32,16 +32,16 @@ class NewsSourceManager:
         for domain in active_domains:
             # Logica per assegnare fonti basata sul tipo di dominio
             if domain == 'calcio':
-                preferences[domain] = ['rss', 'scraping', 'newsapi', 'tavily']
+                preferences[domain] = ['trafilatura', 'rss', 'scraping', 'newsapi', 'tavily']
             elif domain == 'tecnologia':
-                preferences[domain] = ['tavily', 'newsapi', 'rss', 'scraping']
+                preferences[domain] = ['trafilatura', 'tavily', 'newsapi', 'rss', 'scraping']
             elif domain == 'finanza':
-                preferences[domain] = ['newsapi', 'rss', 'scraping', 'tavily']
+                preferences[domain] = ['trafilatura', 'newsapi', 'rss', 'scraping', 'tavily']
             elif domain in ['salute', 'ambiente']:
-                preferences[domain] = ['rss', 'newsapi', 'scraping', 'tavily']
+                preferences[domain] = ['trafilatura', 'rss', 'newsapi', 'scraping', 'tavily']
             else:
                 # Default per domini non specificati
-                preferences[domain] = ['rss', 'newsapi', 'scraping', 'tavily']
+                preferences[domain] = ['trafilatura', 'rss', 'newsapi', 'scraping', 'tavily']
         
         return preferences
     

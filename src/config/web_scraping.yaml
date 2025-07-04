@@ -1,6 +1,12 @@
 # ============================================================================
 # Web Scraping Configuration - Fonti italiane per news scraping
 # ============================================================================
+#
+# CONTROLLO FONTI WEB SCRAPING:
+# - I domini attivi/inattivi sono gestiti da domains.yaml e DomainManager
+# - Le fonti qui definite hanno un flag 'active' per abilitare/disabilitare lo scraping
+# - Solo le fonti con active=true verranno utilizzate per lo scraping
+#
 
 # Configurazione generale
 general:
@@ -20,6 +26,7 @@ headers:
   Connection: "keep-alive"
   Upgrade-Insecure-Requests: "1"
 
+# === CONFIGURAZIONE FONTI ===
 # Configurazione siti per scraping
 sites:
   
@@ -27,6 +34,7 @@ sites:
   ansa:
     name: "ANSA"
     base_url: "https://www.ansa.it"
+    active: true               # Fonte attiva per scraping
     priority: 2
     rate_limit_delay: 2.0  # Ridotto da 4.0 a 2.0
     
@@ -64,6 +72,7 @@ sites:
   corriere:
     name: "Corriere della Sera"
     base_url: "https://www.corriere.it"
+    active: true               # Fonte attiva per scraping
     priority: 2
     rate_limit_delay: 3.0
     
@@ -97,6 +106,7 @@ sites:
   repubblica:
     name: "La Repubblica"
     base_url: "https://www.repubblica.it"
+    active: true               # Fonte attiva per scraping
     priority: 2
     rate_limit_delay: 3.0
     
@@ -130,6 +140,7 @@ sites:
   gazzetta:
     name: "Gazzetta dello Sport"
     base_url: "https://www.gazzetta.it"
+    active: true               # Fonte attiva per scraping
     priority: 1  # Alta priorità per sport
     rate_limit_delay: 2.0
     
@@ -163,6 +174,7 @@ sites:
   corriere_sport:
     name: "Corriere dello Sport"
     base_url: "https://www.corrieredellosport.it"
+    active: true               # Fonte attiva per scraping
     priority: 1
     rate_limit_delay: 2.0  # Ridotto da 3.0
     
@@ -191,6 +203,7 @@ sites:
   tuttomercatoweb:
     name: "Tuttomercatoweb"
     base_url: "https://www.tuttomercatoweb.com"
+    active: true            # Fonte disattivata (problemi di affidabilità)
     priority: 1
     rate_limit_delay: 3.0
     
@@ -224,6 +237,7 @@ sites:
   calciomercato:
     name: "CalcioMercato.com"
     base_url: "https://www.calciomercato.com"
+    active: true              # Fonte attiva per scraping
     priority: 1
     rate_limit_delay: 3.0
     
@@ -257,6 +271,7 @@ sites:
   ansa_sport:
     name: "ANSA Sport"
     base_url: "https://www.ansa.it"
+    active: true               # Fonte attiva per scraping
     priority: 2
     rate_limit_delay: 4.0
     
@@ -291,6 +306,7 @@ sites:
   sole24ore:
     name: "Il Sole 24 Ore"
     base_url: "https://www.ilsole24ore.com"
+    active: true               # Fonte attiva per scraping
     priority: 1  # Alta priorità per economia
     rate_limit_delay: 4.0  # Rispettoso per sito economico
     
@@ -320,13 +336,38 @@ sites:
       - "© RIPRODUZIONE RISERVATA"
       - "Il Sole 24 Ore"
 
-# Mapping domini → siti preferiti (basato su domains.yaml)
+# === MAPPING DOMINI → FONTI ===
+# Mapping delle fonti per ogni dominio
+# Le fonti vengono filtrate automaticamente: solo quelle con active=true vengono usate
 domain_mapping:
-  calcio: ["gazzetta", "corriere_sport", "tuttomercatoweb", "calciomercato", "ansa_sport"]
-  tecnologia: ["repubblica", "corriere", "ansa"]
-  finanza: ["sole24ore", "corriere", "ansa"]
-  salute: ["ansa", "corriere", "repubblica"]
-  ambiente: ["ansa", "corriere", "repubblica"]
+  calcio: 
+    - "gazzetta"           # Specializzata sport
+    - "corriere_sport"     # Specializzata calcio  
+    - "tuttomercatoweb"    # Specializzata calcio
+    - "calciomercato"      # Specializzata calcio
+    - "ansa_sport"         # ANSA sezione sport
+    - "ansa"               # ANSA generale
+    
+  tecnologia: 
+    - "repubblica"         # Sezione tecnologia
+    - "corriere"           # Sezione tecnologia
+    - "ansa"               # ANSA generale
+    
+  finanza: 
+    - "sole24ore"          # Specializzata economia
+    - "corriere"           # Sezione economia
+    - "ansa"               # ANSA generale
+    - "repubblica"         # Sezione economia
+    
+  salute: 
+    - "ansa"               # ANSA generale
+    - "corriere"           # Sezione salute
+    - "repubblica"         # Sezione salute
+    
+  ambiente: 
+    - "ansa"               # ANSA generale
+    - "corriere"           # Sezione ambiente
+    - "repubblica"         # Sezione ambiente
 
 # Filtri globali
 content_filters:

@@ -11,6 +11,7 @@ from .news_source_rss import RSSFeedSource
 from .news_source_newsapi import NewsAPISource
 from .news_source_webscraping import WebScrapingSource
 from .news_source_tavily import TavilyNewsSource
+from .news_source_trafilatura import TrafilaturaWebScrapingSource
 from .news_source_manager import NewsSourceManager
 
 # Importa utilities
@@ -27,7 +28,18 @@ def create_default_news_manager() -> NewsSourceManager:
     """
     manager = NewsSourceManager()
     
-    # 1. RSS Feed Source (priorità alta - sempre disponibile)
+    # 1. Trafilatura Web Scraping Source (priorità massima - AI-powered)
+    try:
+        trafilatura_source = TrafilaturaWebScrapingSource()
+        if trafilatura_source.is_available():
+            manager.add_source('trafilatura', trafilatura_source)
+            logger.info("Trafilatura Web Scraping Source inizializzato")
+        else:
+            logger.info("Trafilatura non disponibile (libreria mancante)")
+    except Exception as e:
+        logger.warning(f"Impossibile inizializzare Trafilatura: {e}")
+    
+    # 2. RSS Feed Source (priorità alta - sempre disponibile)
     try:
         rss_source = RSSFeedSource()
         manager.add_source('rss', rss_source)
@@ -35,18 +47,7 @@ def create_default_news_manager() -> NewsSourceManager:
     except Exception as e:
         logger.warning(f"Impossibile inizializzare RSS: {e}")
     
-    # 2. NewsAPI Source (priorità media)
-    try:
-        newsapi_source = NewsAPISource()
-        if newsapi_source.is_available():
-            manager.add_source('newsapi', newsapi_source)
-            logger.info("NewsAPI Source inizializzato")
-        else:
-            logger.info("NewsAPI non disponibile (API key mancante)")
-    except Exception as e:
-        logger.warning(f"Impossibile inizializzare NewsAPI: {e}")
-    
-    # 3. Web Scraping Source (priorità media)
+    # 3. Web Scraping Source (priorità media - fallback per Trafilatura)
     try:
         scraping_source = WebScrapingSource()
         if scraping_source.is_available():
@@ -57,7 +58,18 @@ def create_default_news_manager() -> NewsSourceManager:
     except Exception as e:
         logger.warning(f"Impossibile inizializzare Web Scraping: {e}")
     
-    # 4. Tavily Source (priorità bassa - fallback)
+    # 4. NewsAPI Source (priorità media)
+    try:
+        newsapi_source = NewsAPISource()
+        if newsapi_source.is_available():
+            manager.add_source('newsapi', newsapi_source)
+            logger.info("NewsAPI Source inizializzato")
+        else:
+            logger.info("NewsAPI non disponibile (API key mancante)")
+    except Exception as e:
+        logger.warning(f"Impossibile inizializzare NewsAPI: {e}")
+    
+    # 5. Tavily Source (priorità bassa - fallback)
     try:
         tavily_source = TavilyNewsSource()
         if tavily_source.is_available():
@@ -84,6 +96,7 @@ __all__ = [
     'NewsAPISource', 
     'WebScrapingSource',
     'TavilyNewsSource',
+    'TrafilaturaWebScrapingSource',
     'NewsSourceManager',
     'create_default_news_manager'
 ]

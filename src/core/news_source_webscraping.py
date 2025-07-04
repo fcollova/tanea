@@ -85,8 +85,18 @@ class WebScrapingSource(NewsSource):
             return None
     
     def is_available(self) -> bool:
-        """Web scraping sempre disponibile se configurazione presente"""
-        return bool(self.scraping_config)
+        """Web scraping disponibile se configurazione presente e almeno una fonte attiva"""
+        if not self.scraping_config:
+            return False
+        
+        # Controlla se c'è almeno una fonte attiva
+        sites = self.scraping_config.get('sites', {})
+        for site_name, site_config in sites.items():
+            if site_config.get('active', True):
+                return True
+        
+        return False
+    
     
     def validate_site_configuration(self, site_config: Dict[str, Any]) -> Dict[str, Any]:
         """Valida e corregge configurazione sito"""
@@ -183,6 +193,7 @@ class WebScrapingSource(NewsSource):
         if not self.is_available():
             self.logger.warning("Configurazione scraping non disponibile")
             return []
+        
             
         try:
             # Espandi keywords per il dominio
@@ -291,6 +302,12 @@ class WebScrapingSource(NewsSource):
         for site_name in preferred_sites:
             if site_name in sites_config:
                 site_config = sites_config[site_name].copy()
+                
+                # Controlla se la fonte è attiva
+                if not site_config.get('active', True):
+                    self.logger.debug(f"Sito {site_name} disattivato (active: false)")
+                    continue
+                
                 site_config['site_key'] = site_name
                 selected_sites.append(site_config)
         

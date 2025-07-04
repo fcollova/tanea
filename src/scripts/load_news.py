@@ -283,6 +283,10 @@ class NewsLoader:
         """Carica notizie solo da Tavily"""
         return self.load_from_specific_sources(['tavily'], domains)
     
+    def load_trafilatura_only(self, domains: Optional[List[NewsQuery]] = None) -> Dict:
+        """Carica notizie solo da Trafilatura (AI-powered web scraping)"""
+        return self.load_from_specific_sources(['trafilatura'], domains)
+    
     def test_sources(self) -> Dict[str, Dict]:
         """Testa tutte le fonti disponibili"""
         logger.info("Test delle fonti di notizie...")
@@ -330,9 +334,11 @@ Esempi di utilizzo:
   python load_news.py                          # Carica da tutte le fonti
   python load_news.py --rss                    # Solo feed RSS
   python load_news.py --newsapi                # Solo NewsAPI
-  python load_news.py --scraping               # Solo web scraping
+  python load_news.py --scraping               # Solo web scraping (BeautifulSoup)
+  python load_news.py --trafilatura            # Solo Trafilatura (AI-powered scraping)
   python load_news.py --tavily                 # Solo Tavily
   python load_news.py --sources rss newsapi    # RSS + NewsAPI
+  python load_news.py --sources trafilatura    # Solo Trafilatura
   python load_news.py --test                   # Test tutte le fonti
   python load_news.py --stats                  # Solo statistiche
   python load_news.py --cleanup 7              # Pulisci articoli >7 giorni
@@ -358,8 +364,12 @@ Esempi di utilizzo:
         help='Carica solo da Tavily'
     )
     source_group.add_argument(
+        '--trafilatura', action='store_true',
+        help='Carica solo da Trafilatura (AI-powered web scraping)'
+    )
+    source_group.add_argument(
         '--sources', nargs='+', 
-        choices=['rss', 'newsapi', 'scraping', 'tavily'],
+        choices=['rss', 'newsapi', 'scraping', 'tavily', 'trafilatura'],
         help='Carica da fonti specifiche (multiple)'
     )
     
@@ -465,7 +475,10 @@ def run_loading_operation(loader: NewsLoader, args):
         method = "NewsAPI"
     elif args.scraping:
         result = loader.load_scraping_only()
-        method = "Web Scraping"
+        method = "Web Scraping (BeautifulSoup)"
+    elif args.trafilatura:
+        result = loader.load_trafilatura_only()
+        method = "Trafilatura (AI-powered scraping)"
     elif args.tavily:
         result = loader.load_tavily_only()
         method = "Tavily"
@@ -507,6 +520,8 @@ def main():
         sources_filter = ['newsapi']
     elif args.scraping:
         sources_filter = ['scraping']
+    elif args.trafilatura:
+        sources_filter = ['trafilatura']
     elif args.tavily:
         sources_filter = ['tavily']
     
