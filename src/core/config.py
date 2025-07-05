@@ -178,6 +178,62 @@ class Config:
             'cleanup_days_old': self.get('scheduler', 'cleanup_days_old', 30, int),
             'check_interval': self.get('scheduler', 'check_interval', 60, int)
         }
+    
+    def get_database_config(self) -> Dict[str, Any]:
+        """Ottiene la configurazione del database PostgreSQL"""
+        return {
+            'url': self.get('database', 'url', 'postgresql://postgres:password@localhost:5432/tanea_news'),
+            'schema': self.get('database', 'schema', 'public'),
+            'pool_size': self.get('database', 'pool_size', 5, int),
+            'pool_timeout': self.get('database', 'pool_timeout', 10, int)
+        }
+    
+    def get_crawler_config(self) -> Dict[str, Any]:
+        """Ottiene la configurazione del crawler"""
+        return {
+            'user_agent': self.get('crawler', 'user_agent', 'TaneaBot/1.0'),
+            'rate_limit': self.get('crawler', 'rate_limit', 2.0, float),
+            'max_concurrent': self.get('crawler', 'max_concurrent', 3, int),
+            'timeout': self.get('crawler', 'timeout', 15, int),
+            'max_retries': self.get('crawler', 'max_retries', 3, int)
+        }
+    
+    def get_web_crawling_config(self) -> Dict[str, Any]:
+        """Ottiene la configurazione web crawling (config + YAML)"""
+        import yaml
+        
+        # Configurazione base dai file config.*
+        base_config = {
+            'config_file': self.get('web_crawling', 'config_file', 'web_crawling.yaml'),
+            'rate_limit_delay': self.get('web_crawling', 'rate_limit_delay', 2.0, float),
+            'max_links_per_site': self.get('web_crawling', 'max_links_per_site', 25, int),
+            'min_quality_score': self.get('web_crawling', 'min_quality_score', 0.3, float),
+            'max_concurrent_requests': self.get('web_crawling', 'max_concurrent_requests', 5, int),
+            'respect_robots_txt': self.get('web_crawling', 'respect_robots_txt', True, bool),
+            'follow_redirects': self.get('web_crawling', 'follow_redirects', True, bool),
+            'verify_ssl': self.get('web_crawling', 'verify_ssl', True, bool),
+            'enable_deduplication': self.get('web_crawling', 'enable_deduplication', True, bool),
+            'extract_metadata': self.get('web_crawling', 'extract_metadata', True, bool),
+            'extract_keywords': self.get('web_crawling', 'extract_keywords', True, bool)
+        }
+        
+        # Carica configurazione YAML
+        yaml_file = base_config['config_file']
+        yaml_path = os.path.join(os.path.dirname(__file__), '..', 'config', yaml_file)
+        
+        try:
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                yaml_config = yaml.safe_load(f) or {}
+            
+            # Combina configurazioni (YAML ha precedenza sui dettagli)
+            combined_config = base_config.copy()
+            combined_config.update(yaml_config)
+            
+            return combined_config
+            
+        except Exception as e:
+            logger.error(f"Errore caricamento {yaml_file}: {e}")
+            return base_config
 
 # Istanza globale di configurazione
 _config_instance = None
@@ -227,6 +283,18 @@ def get_news_config() -> Dict[str, Any]:
 def get_scheduler_config() -> Dict[str, Any]:
     """Accesso rapido alla configurazione scheduler"""
     return get_config().get_scheduler_config()
+
+def get_database_config() -> Dict[str, Any]:
+    """Accesso rapido alla configurazione database"""
+    return get_config().get_database_config()
+
+def get_crawler_config() -> Dict[str, Any]:
+    """Accesso rapido alla configurazione crawler"""
+    return get_config().get_crawler_config()
+
+def get_web_crawling_config() -> Dict[str, Any]:
+    """Accesso rapido alla configurazione web crawling"""
+    return get_config().get_web_crawling_config()
 
 # Funzione per configurare il logging basato sulla configurazione
 def setup_logging():

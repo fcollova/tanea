@@ -1,0 +1,266 @@
+# ============================================================================
+# Web Crawling Configuration - Configurazione dedicata per crawler Trafilatura
+# ============================================================================
+#
+# IMPORTANTE: Domini sono definiti SOLO in domains.yaml
+# Questo file gestisce:
+# - Configurazione link crawling e discovery pages
+# - Mappatura domini → siti (come web_scraping.yaml)
+# - Parametri tecnici crawler e estrazione
+# - I domini devono essere attivi in domains.yaml per essere processati
+#
+
+# Configurazione generale crawler
+general:
+  # Rate limiting e performance
+  rate_limit_delay: 2.0          # Delay tra richieste (secondi)
+  timeout: 15                    # Timeout richieste HTTP (secondi)
+  max_retries: 3                 # Numero massimo retry per richiesta
+  max_concurrent_requests: 5     # Richieste concorrenti massime
+  
+  # Limiti contenuto
+  max_links_per_site: 25         # Link massimi per sito per sessione
+  max_content_length: 50000      # Lunghezza massima contenuto (caratteri)
+  min_content_length: 200        # Lunghezza minima contenuto (caratteri)
+  
+  # Qualità contenuto
+  min_quality_score: 0.3         # Score minimo qualità Trafilatura
+  extract_metadata: true         # Estrai metadati (autore, data, etc.)
+  extract_keywords: true         # Estrai keywords automatiche
+  
+  # Comportamento crawler
+  respect_robots_txt: true       # Rispetta robots.txt
+  follow_redirects: true         # Segui redirect HTTP
+  verify_ssl: true               # Verifica certificati SSL
+  
+  # Storage e deduplicazione
+  enable_deduplication: true     # Evita duplicati per URL e contenuto
+  store_failed_attempts: true    # Salva tentativi falliti per debug
+  cleanup_old_links: true        # Pulizia automatica link obsoleti
+
+# Headers HTTP per crawling
+headers:
+  User-Agent: "Mozilla/5.0 (compatible; TaneaCrawler/2.0; +https://tanea.news/bot)"
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+  Accept-Language: "it-IT,it;q=0.9,en;q=0.8"
+  Accept-Encoding: "gzip, deflate, br"
+  DNT: "1"
+  Connection: "keep-alive"
+  Cache-Control: "max-age=0"
+
+# === CONFIGURAZIONE LINK CRAWLING ===
+# Siti e link organizzati per dominio con parametri specifici
+crawling_sites:
+
+  # ========================================================================
+  # DOMINIO: CALCIO
+  # ========================================================================
+  calcio:
+    priority: 1                   # Priorità dominio per crawling
+    max_articles_per_domain: 100  # Limite articoli per sessione dominio
+    
+    sites:
+      # === GAZZETTA DELLO SPORT ===
+      gazzetta:
+        name: "Gazzetta dello Sport"
+        base_url: "https://www.gazzetta.it"
+        active: true              # Sito attivo per crawling
+        priority: 1               # Priorità sito
+        rate_limit_override: 1.8  # Override rate limit specifico
+        
+        # Pagine di categoria per discovery link
+        discovery_pages:
+          calcio_generale:
+            url: "https://www.gazzetta.it/Calcio/"
+            active: true
+            selectors:
+              article_links: "h2 a[href*='/calcio/'], .article-title a, .news-title a"
+              exclude_patterns: ["/video/", "/foto/", "/podcast/"]
+            max_links: 15
+            
+          serie_a:
+            url: "https://www.gazzetta.it/Calcio/Serie-A/"
+            active: true
+            selectors:
+              article_links: "h2 a, h3 a, .article-link"
+              exclude_patterns: ["/classifica/", "/calendario/"]
+            max_links: 12
+            
+          champions:
+            url: "https://www.gazzetta.it/Calcio/Champions-League/"
+            active: true
+            selectors:
+              article_links: "h2 a, .news-item a"
+            max_links: 8
+        
+        # Parametri estrazione
+        extraction:
+          content_selectors:
+            main: "article .article-body, .content-body, .story-content"
+            fallback: ".article-text, .news-content"
+          title_selectors: "h1, .article-title, .main-title"
+          author_selectors: ".author, .byline, .article-author"
+          date_selectors: ".date, .publish-date, time[datetime]"
+          
+          # Cleanup contenuto
+          remove_selectors: 
+            - ".advertisement, .ads"
+            - ".social-share, .share-buttons"
+            - ".related-articles, .more-news"
+            - ".newsletter-signup"
+            - ".cookie-banner"
+
+      # === CORRIERE DELLO SPORT ===
+      corriere_sport:
+        name: "Corriere dello Sport"
+        base_url: "https://www.corrieredellosport.it"
+        active: true
+        priority: 2
+        
+        discovery_pages:
+          calcio:
+            url: "https://www.corrieredellosport.it/calcio"
+            active: true
+            selectors:
+              article_links: ".article-title a, h2 a, h3 a"
+              exclude_patterns: ["/live/", "/diretta/"]
+            max_links: 12
+            
+          serie_a:
+            url: "https://www.corrieredellosport.it/calcio/serie-a"
+            active: true
+            selectors:
+              article_links: ".news-item a, .article-link"
+            max_links: 10
+        
+        extraction:
+          content_selectors:
+            main: ".article-content, .story-body"
+            fallback: ".content, .text"
+          title_selectors: "h1.article-title, .main-headline"
+          author_selectors: ".author-name, .byline"
+          date_selectors: ".article-date, .timestamp"
+
+      # === TUTTOMERCATOWEB ===
+      tuttomercatoweb:
+        name: "TuttoMercatoWeb"
+        base_url: "https://www.tuttomercatoweb.com"
+        active: true
+        priority: 3
+        rate_limit_override: 2.5  # Sito più lento
+        
+        discovery_pages:
+          serie_a:
+            url: "https://www.tuttomercatoweb.com/serie-a"
+            active: true
+            selectors:
+              article_links: "h2 a, .title a"
+              exclude_patterns: ["/fotogallery/", "/live/"]
+            max_links: 10
+            
+          calciomercato:
+            url: "https://www.tuttomercatoweb.com/calciomercato"
+            active: true
+            selectors:
+              article_links: ".news-title a, h3 a"
+            max_links: 8
+        
+        extraction:
+          content_selectors:
+            main: ".news-body, .article-text"
+          title_selectors: "h1.news-title"
+          author_selectors: ".author"
+          date_selectors: ".news-date"
+
+  # ========================================================================
+  # DOMINIO: TECNOLOGIA  
+  # ========================================================================
+  tecnologia:
+    priority: 2
+    max_articles_per_domain: 50
+    
+    sites:
+      # === ANSA TECNOLOGIA ===
+      ansa_tech:
+        name: "ANSA Tecnologia"
+        base_url: "https://www.ansa.it"
+        active: false             # Sito inattivo
+        priority: 1
+        
+        discovery_pages:
+          tecnologia:
+            url: "https://www.ansa.it/canale_tecnologia/"
+            active: false
+            selectors:
+              article_links: ".news-item h3 a, .article-title a"
+            max_links: 8
+        
+        extraction:
+          content_selectors:
+            main: ".news-txt, .article-body"
+          title_selectors: "h1.news-title"
+
+  # ========================================================================
+  # DOMINIO: FINANZA
+  # ========================================================================
+  finanza:
+    priority: 3
+    max_articles_per_domain: 30
+    
+    sites:
+      # === IL SOLE 24 ORE ===
+      sole24ore:
+        name: "Il Sole 24 ORE"
+        base_url: "https://www.ilsole24ore.com"
+        active: false
+        priority: 1
+        
+        discovery_pages:
+          finanza:
+            url: "https://www.ilsole24ore.com/finanza"
+            active: false
+            selectors:
+              article_links: ".article-title a, h2 a"
+            max_links: 10
+        
+        extraction:
+          content_selectors:
+            main: ".article-body, .content-text"
+          title_selectors: "h1.article-headline"
+
+# === MAPPATURA DOMINI ===
+# Mapping esplicito per validazione e coordinamento
+domain_mapping:
+  calcio:
+    sites: ["gazzetta", "corriere_sport", "tuttomercatoweb"]
+    crawling_keywords: ["calcio", "Serie A", "Champions League", "calciomercato"]  # Per filtri crawler
+    
+  tecnologia:
+    sites: ["ansa_tech"]
+    crawling_keywords: ["tecnologia", "AI", "software", "hardware"]
+    
+  finanza:
+    sites: ["sole24ore"]
+    crawling_keywords: ["finanza", "borsa", "economia", "mercati"]
+
+# === CONFIGURAZIONE AVANZATA ===
+advanced:
+  # Machine Learning e AI
+  use_ai_content_classification: true   # Usa AI per classificare contenuto
+  auto_keyword_extraction: true         # Estrazione automatica keywords
+  content_similarity_threshold: 0.85    # Soglia similarità per duplicati
+  
+  # Monitoring e logging
+  enable_performance_monitoring: true   # Monitoring performance
+  log_failed_extractions: true         # Log estrazioni fallite
+  save_extraction_samples: false       # Salva campioni per debug
+  
+  # Ottimizzazioni
+  use_connection_pooling: true          # Pool connessioni HTTP
+  enable_compression: true              # Compressione response
+  cache_dns_lookups: true              # Cache DNS
+  
+  # Sicurezza
+  validate_content_type: true          # Valida content-type HTML
+  check_content_language: true         # Verifica lingua contenuto
+  max_redirect_hops: 5                 # Massimi redirect da seguire

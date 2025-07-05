@@ -1,0 +1,414 @@
+"""
+Content Extractor - Estrazione contenuto articoli con trafilatura
+"""
+
+import asyncio
+import aiohttp
+import json
+import time
+from typing import Dict, Optional, List
+from datetime import datetime
+from urllib.parse import urlparse
+
+try:
+    import trafilatura
+    from trafilatura.settings import use_config
+    TRAFILATURA_AVAILABLE = True
+except ImportError:
+    TRAFILATURA_AVAILABLE = False
+
+from ..config import get_crawler_config
+from ..log import get_news_logger
+
+logger = get_news_logger(__name__)
+
+class ContentExtractor:
+    """Estrae contenuto articoli usando trafilatura"""
+    
+    def __init__(self):
+        if not TRAFILATURA_AVAILABLE:
+            raise ImportError("Trafilatura richiesta per ContentExtractor")
+        
+        self.config = get_crawler_config()
+        self.session = None
+        
+        # Configurazione trafilatura ottimizzata
+        self._setup_trafilatura()
+        
+        # Stats estrazione
+        self.extraction_stats = {
+            'total_attempts': 0,
+            'successful_extractions': 0,
+            'failed_extractions': 0,
+            'avg_content_length': 0,
+            'total_content_length': 0
+        }
+    
+    def _setup_trafilatura(self):
+        """Configura trafilatura per performance ottimale"""
+        try:
+            config = trafilatura.settings.use_config()
+            
+            # Ottimizzazioni per articoli di notizie
+            config.set('DEFAULT', 'EXTRACTION_TIMEOUT', str(self.config['timeout']))
+            config.set('DEFAULT', 'MIN_EXTRACTED_SIZE', '200')  # Almeno 200 caratteri
+            config.set('DEFAULT', 'MIN_OUTPUT_SIZE', '100')
+            config.set('DEFAULT', 'MAX_OUTPUT_SIZE', '50000')   # Max 50k caratteri
+            
+            # Focus su contenuto principale
+            config.set('DEFAULT', 'FAVOR_PRECISION', 'True')
+            config.set('DEFAULT', 'INCLUDE_COMMENTS', 'False')
+            config.set('DEFAULT', 'INCLUDE_TABLES', 'True')     # Utili per sport/statistiche
+            config.set('DEFAULT', 'INCLUDE_FORMATTING', 'True')
+            
+            self.trafilatura_config = config
+            logger.info("Trafilatura configurata per estrazione news")
+            
+        except Exception as e:
+            logger.warning(f"Errore configurazione trafilatura: {e}")
+            self.trafilatura_config = None
+    
+    async def __aenter__(self):
+        """Context manager entry"""
+        self.session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=self.config['timeout']),
+            headers={
+                'User-Agent': self.config['user_agent'],
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'it-IT,it;q=0.9,en;q=0.8',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive'
+            }
+        )
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit"""
+        if self.session:
+            await self.session.close()
+    
+    async def extract_article(self, url: str, domain: str = "general", 
+                            keywords: List[str] = None) -> Optional[Dict]:
+        """
+        Estrae contenuto articolo da URL
+        
+        Args:
+            url: URL articolo da estrarre
+            domain: Dominio di appartenenza (calcio, tecnologia, etc.)
+            keywords: Keywords per validazione relevanza
+            
+        Returns:
+            dict: Dati articolo estratto o None se fallito
+        """
+        self.extraction_stats['total_attempts'] += 1
+        
+        try:
+            # 1. Scarica pagina
+            html = await self._fetch_article_page(url)
+            if not html:
+                self.extraction_stats['failed_extractions'] += 1
+                return None
+            
+            # 2. Estrai contenuto con trafilatura  
+            extracted_data = self._extract_with_trafilatura(html, url)
+            if not extracted_data:
+                self.extraction_stats['failed_extractions'] += 1
+                return None
+            
+            # 3. Valida e enrichment
+            article_data = self._validate_and_enrich(extracted_data, url, domain, keywords)
+            if not article_data:
+                self.extraction_stats['failed_extractions'] += 1
+                return None
+            
+            # 4. Aggiorna statistiche
+            self._update_stats(article_data)
+            
+            logger.debug(f"Articolo estratto: {article_data['title'][:50]}...")
+            return article_data
+            
+        except Exception as e:
+            logger.error(f"Errore estrazione {url}: {e}")
+            self.extraction_stats['failed_extractions'] += 1
+            return None
+    
+    async def _fetch_article_page(self, url: str) -> Optional[str]:
+        """Scarica pagina articolo"""
+        try:
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    return await response.text()
+                else:
+                    logger.warning(f"HTTP {response.status} per {url}")
+                    return None
+                    
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout per {url}")
+            return None
+        except Exception as e:
+            logger.error(f"Errore fetch {url}: {e}")
+            return None
+    
+    def _extract_with_trafilatura(self, html: str, url: str) -> Optional[Dict]:
+        """Estrae contenuto usando trafilatura"""
+        try:
+            # Estrazione con output JSON per metadati completi
+            extracted = trafilatura.extract(
+                html,
+                output_format='json',
+                config=self.trafilatura_config,
+                include_comments=False,
+                include_tables=True,
+                include_formatting=True,
+                favor_precision=True
+            )
+            
+            if not extracted:
+                return None
+            
+            # Parse JSON se necessario
+            if isinstance(extracted, str):
+                data = json.loads(extracted)
+            else:
+                data = extracted
+            
+            return data
+            
+        except Exception as e:
+            logger.debug(f"Errore trafilatura per {url}: {e}")
+            return None
+    
+    def _validate_and_enrich(self, extracted_data: Dict, url: str, 
+                           domain: str, keywords: List[str] = None) -> Optional[Dict]:
+        """Valida e arricchisce dati estratti"""
+        try:
+            title = extracted_data.get('title', '').strip()
+            content = extracted_data.get('text', '').strip()
+            
+            # Validazioni base
+            if not title or len(title) < 10:
+                logger.debug(f"Titolo troppo corto o assente: {url}")
+                return None
+            
+            if not content or len(content) < 200:
+                logger.debug(f"Contenuto troppo corto: {url} ({len(content)} caratteri)")
+                return None
+            
+            # Filtra per keywords se specificate
+            if keywords:
+                text_to_check = f"{title} {content}".lower()
+                if not any(keyword.lower() in text_to_check for keyword in keywords):
+                    logger.debug(f"Keywords non trovate in {url}")
+                    return None
+            
+            # Parse data pubblicazione
+            published_date = self._parse_publication_date(extracted_data.get('date'))
+            
+            # Calcola quality score
+            quality_score = self._calculate_quality_score(title, content, extracted_data)
+            
+            # Estrai keywords dal contenuto
+            found_keywords = self._extract_content_keywords(content, domain)
+            
+            # Costruisci articolo finale
+            article_data = {
+                'title': title,
+                'content': content,
+                'url': url,
+                'published_date': published_date,
+                'author': extracted_data.get('author', ''),
+                'source': self._extract_source_name(url, extracted_data),
+                'domain': domain,
+                'quality_score': quality_score,
+                'keywords': found_keywords,
+                'metadata': {
+                    'extraction_method': 'trafilatura',
+                    'extraction_date': datetime.now().isoformat(),
+                    'content_length': len(content),
+                    'description': extracted_data.get('description', ''),
+                    'sitename': extracted_data.get('sitename', ''),
+                    'language': extracted_data.get('language', 'it'),
+                    'url_parsed': urlparse(url)._asdict()
+                }
+            }
+            
+            return article_data
+            
+        except Exception as e:
+            logger.error(f"Errore validazione/enrichment {url}: {e}")
+            return None
+    
+    def _parse_publication_date(self, date_str: Optional[str]) -> Optional[datetime]:
+        """Parse data pubblicazione"""
+        if not date_str:
+            return None
+        
+        try:
+            # Trafilatura normalizza già le date
+            if 'T' in date_str:
+                # Formato ISO
+                return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            else:
+                # Formato data semplice
+                return datetime.fromisoformat(date_str)
+                
+        except Exception:
+            # Fallback con dateutil se disponibile
+            try:
+                from dateutil import parser as date_parser
+                return date_parser.parse(date_str)
+            except:
+                logger.debug(f"Impossibile parsare data: {date_str}")
+                return None
+    
+    def _calculate_quality_score(self, title: str, content: str, data: Dict) -> float:
+        """Calcola score qualità contenuto"""
+        score = 0.5  # Base score
+        
+        # Bonus per metadati completi
+        if data.get('author'):
+            score += 0.15
+        if data.get('date'):
+            score += 0.15
+        if data.get('description'):
+            score += 0.1
+        
+        # Bonus per lunghezza contenuto appropriata
+        content_length = len(content)
+        if 1000 <= content_length <= 8000:  # Lunghezza ideale
+            score += 0.2
+        elif 500 <= content_length <= 15000:  # Accettabile
+            score += 0.1
+        elif content_length < 200:  # Troppo corto
+            score -= 0.2
+        
+        # Bonus per titolo informativo
+        if 20 <= len(title) <= 150:
+            score += 0.1
+        
+        # Bonus per struttura contenuto
+        if content.count('\n') > 3:  # Paragrafi multipli
+            score += 0.05
+        
+        return min(1.0, max(0.0, score))
+    
+    def _extract_source_name(self, url: str, data: Dict) -> str:
+        """Estrae nome fonte"""
+        # Prima prova sitename da trafilatura
+        sitename = data.get('sitename', '')
+        if sitename:
+            return sitename
+        
+        # Fallback dal dominio URL
+        try:
+            domain = urlparse(url).netloc
+            # Rimuovi www. e estrai nome principale
+            domain = domain.replace('www.', '')
+            domain_parts = domain.split('.')
+            if domain_parts:
+                return domain_parts[0].title()
+        except:
+            pass
+        
+        return 'Unknown Source'
+    
+    def _extract_content_keywords(self, content: str, domain: str) -> List[str]:
+        """Estrae keywords rilevanti dal contenuto"""
+        keywords = []
+        content_lower = content.lower()
+        
+        # Keywords per dominio calcio
+        if domain == 'calcio':
+            calcio_keywords = [
+                'serie a', 'juventus', 'inter', 'milan', 'napoli', 'roma', 'lazio',
+                'atalanta', 'fiorentina', 'champions league', 'europa league',
+                'coppa italia', 'calciomercato', 'gol', 'partita', 'allenatore',
+                'giocatore', 'stadio', 'classifica'
+            ]
+            keywords.extend([kw for kw in calcio_keywords if kw in content_lower])
+        
+        # Keywords per tecnologia
+        elif domain == 'tecnologia':
+            tech_keywords = [
+                'intelligenza artificiale', 'ai', 'machine learning', 'chatgpt',
+                'openai', 'google', 'microsoft', 'apple', 'startup', 'innovation',
+                'robotica', 'automazione', 'blockchain', 'crypto'
+            ]
+            keywords.extend([kw for kw in tech_keywords if kw in content_lower])
+        
+        # Keywords per finanza
+        elif domain == 'finanza':
+            finance_keywords = [
+                'borsa italiana', 'ftse mib', 'investimenti', 'bce', 'euro',
+                'inflazione', 'mercati finanziari', 'bitcoin', 'criptovalute',
+                'banche', 'economia italiana'
+            ]
+            keywords.extend([kw for kw in finance_keywords if kw in content_lower])
+        
+        return keywords[:10]  # Limita numero keywords
+    
+    def _update_stats(self, article_data: Dict):
+        """Aggiorna statistiche estrazione"""
+        self.extraction_stats['successful_extractions'] += 1
+        
+        content_length = len(article_data['content'])
+        self.extraction_stats['total_content_length'] += content_length
+        
+        # Calcola media lunghezza
+        successful = self.extraction_stats['successful_extractions']
+        self.extraction_stats['avg_content_length'] = (
+            self.extraction_stats['total_content_length'] / successful
+        )
+    
+    async def batch_extract_articles(self, urls: List[str], domain: str = "general",
+                                   keywords: List[str] = None, 
+                                   max_concurrent: int = 3) -> List[Dict]:
+        """
+        Estrae articoli in batch con concorrenza limitata
+        
+        Args:
+            urls: Lista URL da estrarre
+            domain: Dominio di appartenenza
+            keywords: Keywords per validazione
+            max_concurrent: Massimo estrattori concorrenti
+            
+        Returns:
+            list: Lista articoli estratti con successo
+        """
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def extract_with_semaphore(url):
+            async with semaphore:
+                # Rate limiting
+                await asyncio.sleep(self.config['rate_limit'])
+                return await self.extract_article(url, domain, keywords)
+        
+        # Esegui estrazione concorrente
+        tasks = [extract_with_semaphore(url) for url in urls]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Filtra risultati validi
+        articles = []
+        for i, result in enumerate(results):
+            if isinstance(result, dict):
+                articles.append(result)
+            elif isinstance(result, Exception):
+                logger.error(f"Errore estrazione {urls[i]}: {result}")
+        
+        logger.info(f"Batch extraction: {len(articles)}/{len(urls)} successi")
+        return articles
+    
+    def get_extraction_stats(self) -> Dict[str, any]:
+        """Statistiche estrazione"""
+        total = self.extraction_stats['total_attempts']
+        success_rate = (
+            self.extraction_stats['successful_extractions'] / total 
+            if total > 0 else 0
+        )
+        
+        return {
+            **self.extraction_stats,
+            'success_rate': success_rate,
+            'failure_rate': 1 - success_rate
+        }

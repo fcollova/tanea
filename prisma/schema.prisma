@@ -1,0 +1,191 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider                = "prisma-client-py"
+  interface               = "asyncio"
+  recursive_type_depth    = 5
+  previewFeatures         = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// CRAWLER DATABASE SCHEMA
+// Architettura ibrida: PostgreSQL per link management + Weaviate per content
+// ============================================================================
+
+// Configurazione siti da crawlare
+model Site {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  base_url   String
+  active     Boolean  @default(true)
+  priority   Int      @default(1) // 1=alta, 2=media, 3=bassa
+  config     Json?    // Configurazione YAML completa
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relazioni
+  discovered_links DiscoveredLink[]
+  crawl_stats      CrawlStats[]
+
+  @@map("sites")
+  @@index([active, priority])
+}
+
+// Link scoperti durante il crawling
+model DiscoveredLink {
+  id             String            @id @default(cuid())
+  url            String            @unique
+  url_hash       String            @unique // SHA256 per performance
+  site_id        String
+  parent_url     String?
+  discovered_at  DateTime          @default(now())
+  page_type      PageType          @default(ARTICLE)
+  depth          Int               @default(0)
+  status         LinkStatus        @default(NEW)
+  last_crawled   DateTime?
+  crawl_count    Int               @default(0)
+  error_count    Int               @default(0)
+  content_hash   String?           // Hash contenuto per detect duplicati
+  title_preview  String?           // Preview titolo per debug
+  created_at     DateTime          @default(now())
+  updated_at     DateTime          @updatedAt
+
+  // Relazioni
+  site            Site              @relation(fields: [site_id], references: [id], onDelete: Cascade)
+  crawl_attempts  CrawlAttempt[]
+  extracted_article ExtractedArticle?
+
+  @@map("discovered_links")
+  @@index([status, site_id])
+  @@index([url_hash])
+  @@index([site_id, discovered_at])
+  @@index([last_crawled])
+}
+
+// Tentativi di crawling per ogni link
+model CrawlAttempt {
+  id              String   @id @default(cuid())
+  link_id         String
+  attempted_at    DateTime @default(now())
+  success         Boolean
+  error_message   String?
+  response_time   Int?     // millisecondi
+  content_length  Int?
+  http_status     Int?
+  user_agent      String?
+
+  // Relazioni
+  link DiscoveredLink @relation(fields: [link_id], references: [id], onDelete: Cascade)
+
+  @@map("crawl_attempts")
+  @@index([link_id, attempted_at])
+  @@index([success, attempted_at])
+}
+
+// Articoli estratti e salvati in Weaviate
+model ExtractedArticle {
+  id              String    @id @default(cuid())
+  link_id         String    @unique
+  weaviate_id     String?   @unique // ID oggetto in Weaviate
+  title           String
+  author          String?
+  published_date  DateTime?
+  extracted_at    DateTime  @default(now())
+  content_length  Int
+  quality_score   Float     @default(0.0)
+  language        String    @default("it")
+  domain          String    // calcio, tecnologia, etc.
+  keywords        String[]  // Keywords trovate
+  metadata        Json?     // Metadati aggiuntivi
+  
+  // Relazioni
+  link DiscoveredLink @relation(fields: [link_id], references: [id], onDelete: Cascade)
+
+  @@map("extracted_articles")
+  @@index([domain, published_date])
+  @@index([quality_score])
+  @@index([extracted_at])
+  @@index([weaviate_id])
+}
+
+// Statistiche crawling per sito
+model CrawlStats {
+  id                    String   @id @default(cuid())
+  site_id               String
+  date                  DateTime @default(now()) @db.Date
+  links_discovered      Int      @default(0)
+  links_crawled         Int      @default(0)
+  articles_extracted    Int      @default(0)
+  errors_count          Int      @default(0)
+  avg_response_time     Float?
+  avg_content_length    Float?
+  avg_quality_score     Float?
+
+  // Relazioni
+  site Site @relation(fields: [site_id], references: [id], onDelete: Cascade)
+
+  @@map("crawl_stats")
+  @@unique([site_id, date])
+  @@index([date])
+}
+
+// Job di crawling schedulati
+model CrawlJob {
+  id            String     @id @default(cuid())
+  site_id       String?    // NULL = tutti i siti
+  job_type      JobType
+  status        JobStatus  @default(PENDING)
+  scheduled_at  DateTime
+  started_at    DateTime?
+  completed_at  DateTime?
+  error_message String?
+  config        Json?      // Configurazione specifica job
+  results       Json?      // Risultati job
+  created_at    DateTime   @default(now())
+
+  @@map("crawl_jobs")
+  @@index([status, scheduled_at])
+  @@index([job_type, status])
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum PageType {
+  ARTICLE
+  CATEGORY  
+  HOMEPAGE
+  OTHER
+}
+
+enum LinkStatus {
+  NEW       // Scoperto ma non crawlato
+  CRAWLING  // In corso di crawling
+  CRAWLED   // Crawlato con successo
+  FAILED    // Crawling fallito
+  OBSOLETE  // Link obsoleto/rimosso
+  BLOCKED   // Bloccato (robots.txt, etc.)
+}
+
+enum JobType {
+  DISCOVER_LINKS    // Scoperta nuovi link
+  CRAWL_ARTICLES   // Crawling articoli
+  CLEANUP          // Pulizia link obsoleti
+  REFRESH_CONTENT  // Refresh contenuti esistenti
+  FULL_CRAWL       // Crawling completo sito
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}

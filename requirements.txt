@@ -18,6 +18,11 @@ langchain-weaviate>=0.0.5
 # News search API
 tavily-python>=0.3.0
 
+# === DATABASE ===
+# PostgreSQL ORM
+prisma>=0.13.0
+asyncpg>=0.29.0
+
 # === UTILITIES ===
 # Web UI for exploration
 streamlit>=1.30.0
