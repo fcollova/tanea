@@ -195,7 +195,16 @@ class Config:
             'rate_limit': self.get('crawler', 'rate_limit', 2.0, float),
             'max_concurrent': self.get('crawler', 'max_concurrent', 3, int),
             'timeout': self.get('crawler', 'timeout', 15, int),
-            'max_retries': self.get('crawler', 'max_retries', 3, int)
+            'max_retries': self.get('crawler', 'max_retries', 3, int),
+            
+            # Rate limiting avanzato
+            'rate_limit_enabled': self.get('crawler', 'rate_limit_enabled', True, bool),
+            'rate_limit_default_rps': self.get('crawler', 'rate_limit_default_rps', 0.5, float),
+            'rate_limit_max_concurrent': self.get('crawler', 'rate_limit_max_concurrent', 2, int),
+            'rate_limit_back_off_factor': self.get('crawler', 'rate_limit_back_off_factor', 2.0, float),
+            'rate_limit_max_back_off': self.get('crawler', 'rate_limit_max_back_off', 300.0, float),
+            'robots_txt_enabled': self.get('crawler', 'robots_txt_enabled', True, bool),
+            'robots_txt_cache_hours': self.get('crawler', 'robots_txt_cache_hours', 24, int)
         }
     
     def get_web_crawling_config(self) -> Dict[str, Any]:
@@ -214,7 +223,13 @@ class Config:
             'verify_ssl': self.get('web_crawling', 'verify_ssl', True, bool),
             'enable_deduplication': self.get('web_crawling', 'enable_deduplication', True, bool),
             'extract_metadata': self.get('web_crawling', 'extract_metadata', True, bool),
-            'extract_keywords': self.get('web_crawling', 'extract_keywords', True, bool)
+            'extract_keywords': self.get('web_crawling', 'extract_keywords', True, bool),
+            
+            # Parametri spider Trafilatura
+            'spider_max_depth': self.get('web_crawling', 'spider_max_depth', 2, int),
+            'spider_max_pages': self.get('web_crawling', 'spider_max_pages', 50, int),
+            'spider_max_known_urls': self.get('web_crawling', 'spider_max_known_urls', 150, int),
+            'spider_language': self.get('web_crawling', 'spider_language', 'it')
         }
         
         # Carica configurazione YAML

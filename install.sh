@@ -117,10 +117,75 @@ if [ -f "requirements.txt" ]; then
     python3 -c "import feedparser; print('✅ Feedparser installato')" 2>/dev/null || print_warning "❌ Feedparser non installato"
     python3 -c "import bs4; print('✅ BeautifulSoup installato')" 2>/dev/null || print_warning "❌ BeautifulSoup non installato"
     python3 -c "import yaml; print('✅ PyYAML installato')" 2>/dev/null || print_warning "❌ PyYAML non installato"
+    python3 -c "import prisma; print('✅ Prisma installato')" 2>/dev/null || print_warning "❌ Prisma non installato"
     
 else
     print_error "File requirements.txt non trovato"
     exit 1
+fi
+
+# 4.5. Setup Prisma
+print_status "Setup Prisma ORM..."
+if [ -f "prisma/schema.prisma" ]; then
+    print_status "Generazione client Prisma..."
+    if prisma generate > /dev/null 2>&1; then
+        print_success "✅ Prisma client generato"
+    else
+        print_error "❌ Errore nella generazione del client Prisma"
+        print_status "Verifica che il file prisma/schema.prisma sia corretto"
+        exit 1
+    fi
+    
+    print_status "Setup database PostgreSQL..."
+    
+    # Verifica se PostgreSQL è installato
+    if command -v psql &> /dev/null; then
+        print_success "PostgreSQL trovato"
+        
+        # Verifica se PostgreSQL è in esecuzione
+        if sudo systemctl is-active --quiet postgresql 2>/dev/null || sudo service postgresql status >/dev/null 2>&1; then
+            print_success "PostgreSQL è in esecuzione"
+            
+            # Crea utente e database se non esistono
+            print_status "Creazione utente e database PostgreSQL..."
+            
+            # Crea utente tanea_user se non esiste
+            sudo -u postgres psql -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_user WHERE usename = 'tanea_user') THEN CREATE USER tanea_user WITH PASSWORD 'tanea_secure_2024!' CREATEDB; END IF; END \$\$;" 2>/dev/null || true
+            
+            # Crea database tanea_news se non esiste
+            sudo -u postgres psql -c "CREATE DATABASE tanea_news OWNER tanea_user;" 2>/dev/null || true
+            
+            # Assegna privilegi
+            sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE tanea_news TO tanea_user;" 2>/dev/null || true
+            
+            print_success "Database PostgreSQL configurato"
+            
+            # Ora esegui prisma db push
+            print_status "Esecuzione Prisma DB push..."
+            if prisma db push > /dev/null 2>&1; then
+                print_success "✅ Schema database creato"
+            else
+                print_warning "❌ Errore creazione schema - eseguire manualmente: prisma db push"
+            fi
+            
+        else
+            print_warning "PostgreSQL non è in esecuzione"
+            print_status "Avvia PostgreSQL con: sudo systemctl start postgresql"
+            print_status "Poi esegui manualmente:"
+            print_status "  sudo -u postgres psql -c \"CREATE USER tanea_user WITH PASSWORD 'tanea_secure_2024!' CREATEDB;\""
+            print_status "  sudo -u postgres psql -c \"CREATE DATABASE tanea_news OWNER tanea_user;\""
+            print_status "  prisma db push"
+        fi
+    else
+        print_warning "PostgreSQL non installato"
+        print_status "Installa PostgreSQL:"
+        print_status "  Ubuntu/Debian: sudo apt install postgresql postgresql-contrib"
+        print_status "  CentOS/RHEL: sudo yum install postgresql-server postgresql-contrib"
+        print_status "  macOS: brew install postgresql"
+    fi
+else
+    print_warning "❌ File prisma/schema.prisma non trovato"
+    print_status "Prisma non verrà configurato"
 fi
 
 # 5. Crea file .env se non esiste

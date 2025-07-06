@@ -118,15 +118,18 @@ class LinkDatabase:
         
         # Batch insert con skip duplicati
         created_count = 0
+        duplicate_count = 0
         for data in link_data:
             try:
                 await self.db.discoveredlink.create(data=data)
                 created_count += 1
-            except Exception:
+            except Exception as e:
                 # Skip duplicati (constraint violation)
+                duplicate_count += 1
+                logger.debug(f"Link duplicato ignorato: {data['url']}")
                 continue
         
-        logger.info(f"Aggiunti {created_count}/{len(links)} nuovi link per sito {site_id}")
+        logger.info(f"Aggiunti {created_count}/{len(links)} nuovi link per sito {site_id} ({duplicate_count} duplicati)")
         return created_count
     
     async def get_links_to_crawl(self, site_id: str = None, limit: int = 100, 
@@ -136,6 +139,12 @@ class LinkDatabase:
         if site_id:
             where_clause['site_id'] = site_id
         
+        # Prima verifica quanti link ci sono in totale per questo sito
+        if site_id:
+            total_links = await self.db.discoveredlink.count(where={'site_id': site_id})
+            new_links = await self.db.discoveredlink.count(where={'site_id': site_id, 'status': LinkStatus.NEW})
+            logger.info(f"Sito {site_id}: {total_links} link totali, {new_links} con status NEW")
+        
         links = await self.db.discoveredlink.find_many(
             where=where_clause,
             include={'site': True},
@@ -143,7 +152,7 @@ class LinkDatabase:
             take=limit
         )
         
-        logger.debug(f"Recuperati {len(links)} link da crawlare")
+        logger.info(f"get_links_to_crawl: richiesti max {limit} link con status {status.value}, trovati {len(links)}")
         return links
     
     async def mark_link_crawling(self, link_id: str):

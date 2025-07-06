@@ -1,4 +1,4 @@
-# docker-compose.yml per Weaviate locale con Studio GUI
+# docker-compose.yml per Weaviate locale
 services:
   weaviate:
     command:
@@ -22,7 +22,6 @@ services:
       CLUSTER_HOSTNAME: 'node1'
     volumes:
     - weaviate_data:/var/lib/weaviate
-
 
 volumes:
   weaviate_data:

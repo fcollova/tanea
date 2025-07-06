@@ -64,7 +64,7 @@ crawling_sites:
       gazzetta:
         name: "Gazzetta dello Sport"
         base_url: "https://www.gazzetta.it"
-        active: true              # Sito attivo per crawling
+        active: false             # Sito disattivato per crawling
         priority: 1               # Priorità sito
         rate_limit_override: 1.8  # Override rate limit specifico
         
@@ -72,7 +72,7 @@ crawling_sites:
         discovery_pages:
           calcio_generale:
             url: "https://www.gazzetta.it/Calcio/"
-            active: true
+            active: false
             selectors:
               article_links: "h2 a[href*='/calcio/'], .article-title a, .news-title a"
               exclude_patterns: ["/video/", "/foto/", "/podcast/"]
@@ -80,7 +80,7 @@ crawling_sites:
             
           serie_a:
             url: "https://www.gazzetta.it/Calcio/Serie-A/"
-            active: true
+            active: false
             selectors:
               article_links: "h2 a, h3 a, .article-link"
               exclude_patterns: ["/classifica/", "/calendario/"]
@@ -88,7 +88,7 @@ crawling_sites:
             
           champions:
             url: "https://www.gazzetta.it/Calcio/Champions-League/"
-            active: true
+            active: false
             selectors:
               article_links: "h2 a, .news-item a"
             max_links: 8
@@ -114,13 +114,13 @@ crawling_sites:
       corriere_sport:
         name: "Corriere dello Sport"
         base_url: "https://www.corrieredellosport.it"
-        active: true
+        active: false
         priority: 2
         
         discovery_pages:
           calcio:
             url: "https://www.corrieredellosport.it/calcio"
-            active: true
+            active: false
             selectors:
               article_links: ".article-title a, h2 a, h3 a"
               exclude_patterns: ["/live/", "/diretta/"]
@@ -128,7 +128,7 @@ crawling_sites:
             
           serie_a:
             url: "https://www.corrieredellosport.it/calcio/serie-a"
-            active: true
+            active: false
             selectors:
               article_links: ".news-item a, .article-link"
             max_links: 10

@@ -19,6 +19,7 @@ except ImportError:
 
 from ..config import get_crawler_config
 from ..log import get_news_logger
+from .rate_limiter import AdvancedRateLimiter
 
 logger = get_news_logger(__name__)
 
@@ -31,6 +32,7 @@ class ContentExtractor:
         
         self.config = get_crawler_config()
         self.session = None
+        self.rate_limiter = AdvancedRateLimiter()
         
         # Configurazione trafilatura ottimizzata
         self._setup_trafilatura()
@@ -102,61 +104,86 @@ class ContentExtractor:
             dict: Dati articolo estratto o None se fallito
         """
         self.extraction_stats['total_attempts'] += 1
+        logger.info(f"[EXTRACTION DEBUG] Inizio estrazione per: {url}")
         
         try:
             # 1. Scarica pagina
+            logger.info(f"[EXTRACTION DEBUG] Step 1: Fetch pagina")
             html = await self._fetch_article_page(url)
             if not html:
+                logger.info(f"[EXTRACTION DEBUG] FALLIMENTO Step 1: HTML non ottenuto")
                 self.extraction_stats['failed_extractions'] += 1
                 return None
+            logger.info(f"[EXTRACTION DEBUG] Step 1 OK: HTML ottenuto ({len(html)} caratteri)")
             
             # 2. Estrai contenuto con trafilatura  
+            logger.info(f"[EXTRACTION DEBUG] Step 2: Estrazione Trafilatura")
             extracted_data = self._extract_with_trafilatura(html, url)
             if not extracted_data:
+                logger.info(f"[EXTRACTION DEBUG] FALLIMENTO Step 2: Trafilatura non ha estratto dati")
                 self.extraction_stats['failed_extractions'] += 1
                 return None
+            logger.info(f"[EXTRACTION DEBUG] Step 2 OK: Dati estratti = {list(extracted_data.keys())}")
+            # logger.info(f"[EXTRACTION DEBUG] Dati estratti completi: {extracted_data}")  # Commentato per ridurre log
             
             # 3. Valida e enrichment
+            logger.info(f"[EXTRACTION DEBUG] Step 3: Validazione")
             article_data = self._validate_and_enrich(extracted_data, url, domain, keywords)
             if not article_data:
+                logger.info(f"[EXTRACTION DEBUG] FALLIMENTO Step 3: Validazione fallita")
                 self.extraction_stats['failed_extractions'] += 1
                 return None
+            logger.info(f"[EXTRACTION DEBUG] Step 3 OK: Articolo validato")
             
             # 4. Aggiorna statistiche
             self._update_stats(article_data)
             
-            logger.debug(f"Articolo estratto: {article_data['title'][:50]}...")
+            logger.info(f"[EXTRACTION DEBUG] SUCCESSO: {article_data['title'][:50]}...")
             return article_data
             
         except Exception as e:
-            logger.error(f"Errore estrazione {url}: {e}")
+            logger.error(f"[EXTRACTION DEBUG] ERRORE ECCEZIONE: {url}: {e}")
             self.extraction_stats['failed_extractions'] += 1
             return None
     
     async def _fetch_article_page(self, url: str) -> Optional[str]:
-        """Scarica pagina articolo"""
+        """Scarica pagina articolo con rate limiting"""
         try:
-            async with self.session.get(url) as response:
-                if response.status == 200:
-                    return await response.text()
-                else:
-                    logger.warning(f"HTTP {response.status} per {url}")
-                    return None
-                    
-        except asyncio.TimeoutError:
-            logger.warning(f"Timeout per {url}")
-            return None
+            # Applica rate limiting
+            if not await self.rate_limiter.acquire_for_url(url):
+                logger.warning(f"Rate limiter ha bloccato {url}")
+                return None
+            
+            try:
+                async with self.session.get(url) as response:
+                    if response.status == 200:
+                        content = await response.text()
+                        self.rate_limiter.release_for_url(url, success=True)
+                        return content
+                    else:
+                        logger.warning(f"HTTP {response.status} per {url}")
+                        self.rate_limiter.release_for_url(url, success=False)
+                        return None
+                        
+            except asyncio.TimeoutError:
+                logger.warning(f"Timeout per {url}")
+                self.rate_limiter.release_for_url(url, success=False)
+                return None
+            except Exception as e:
+                logger.error(f"Errore fetch {url}: {e}")
+                self.rate_limiter.release_for_url(url, success=False)
+                return None
+                
         except Exception as e:
-            logger.error(f"Errore fetch {url}: {e}")
+            logger.error(f"Errore rate limiting per {url}: {e}")
             return None
     
     def _extract_with_trafilatura(self, html: str, url: str) -> Optional[Dict]:
         """Estrae contenuto usando trafilatura"""
         try:
-            # Estrazione con output JSON per metadati completi
-            extracted = trafilatura.extract(
+            # Estrazione separata per contenuto e metadati
+            content = trafilatura.extract(
                 html,
-                output_format='json',
                 config=self.trafilatura_config,
                 include_comments=False,
                 include_tables=True,
@@ -164,14 +191,22 @@ class ContentExtractor:
                 favor_precision=True
             )
             
-            if not extracted:
+            if not content:
                 return None
             
-            # Parse JSON se necessario
-            if isinstance(extracted, str):
-                data = json.loads(extracted)
-            else:
-                data = extracted
+            # Estrazione metadati separata
+            metadata = trafilatura.extract_metadata(html)
+            
+            # Costruisci dizionario dati
+            data = {
+                'text': content,
+                'title': metadata.title if metadata else '',
+                'author': metadata.author if metadata else '',
+                'date': metadata.date if metadata else None,
+                'description': metadata.description if metadata else '',
+                'sitename': metadata.sitename if metadata else '',
+                'language': metadata.language if metadata else 'it'
+            }
             
             return data
             
@@ -186,13 +221,17 @@ class ContentExtractor:
             title = extracted_data.get('title', '').strip()
             content = extracted_data.get('text', '').strip()
             
+            logger.info(f"[VALIDATION DEBUG] Titolo: '{title}' (len={len(title)})")
+            logger.info(f"[VALIDATION DEBUG] Contenuto: {len(content)} caratteri")
+            logger.info(f"[VALIDATION DEBUG] Primi 200 char: {content[:200]}...")
+            
             # Validazioni base
             if not title or len(title) < 10:
-                logger.debug(f"Titolo troppo corto o assente: {url}")
+                logger.info(f"[VALIDATION DEBUG] FALLIMENTO: Titolo troppo corto o assente: {url}")
                 return None
             
             if not content or len(content) < 200:
-                logger.debug(f"Contenuto troppo corto: {url} ({len(content)} caratteri)")
+                logger.info(f"[VALIDATION DEBUG] FALLIMENTO: Contenuto troppo corto: {url} ({len(content)} caratteri)")
                 return None
             
             # Filtra per keywords se specificate
@@ -240,24 +279,35 @@ class ContentExtractor:
             return None
     
     def _parse_publication_date(self, date_str: Optional[str]) -> Optional[datetime]:
-        """Parse data pubblicazione"""
+        """Parse data pubblicazione con formato RFC3339 per Weaviate"""
         if not date_str:
             return None
         
         try:
             # Trafilatura normalizza già le date
             if 'T' in date_str:
-                # Formato ISO
-                return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                # Formato ISO già presente
+                dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
             else:
-                # Formato data semplice
-                return datetime.fromisoformat(date_str)
+                # Formato data semplice - aggiungi orario per RFC3339
+                dt = datetime.fromisoformat(date_str + 'T06:00:00')
+            
+            # Assicura timezone UTC per RFC3339
+            if dt.tzinfo is None:
+                from datetime import timezone
+                dt = dt.replace(tzinfo=timezone.utc)  # Aggiungi timezone UTC
+                
+            return dt
                 
         except Exception:
             # Fallback con dateutil se disponibile
             try:
                 from dateutil import parser as date_parser
-                return date_parser.parse(date_str)
+                dt = date_parser.parse(date_str)
+                if dt.tzinfo is None:
+                    from datetime import timezone
+                    dt = dt.replace(tzinfo=timezone.utc)  # Aggiungi timezone UTC
+                return dt
             except:
                 logger.debug(f"Impossibile parsare data: {date_str}")
                 return None

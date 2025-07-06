@@ -3,13 +3,17 @@ Crawler system per architettura ibrida
 Link discovery + content extraction con trafilatura
 """
 
-from .link_discoverer import LinkDiscoverer
+from .trafilatura_link_discoverer import TrafilaturaLinkDiscoverer
 from .content_extractor import ContentExtractor
 from .trafilatura_crawler import TrafilaturaCrawler
 from .crawl_scheduler import CrawlScheduler
 
+# Backward compatibility
+LinkDiscoverer = TrafilaturaLinkDiscoverer
+
 __all__ = [
-    'LinkDiscoverer',
+    'TrafilaturaLinkDiscoverer',
+    'LinkDiscoverer',  # Backward compatibility
     'ContentExtractor', 
     'TrafilaturaCrawler',
     'CrawlScheduler'

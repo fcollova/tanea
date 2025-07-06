@@ -15,7 +15,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from core.crawler.trafilatura_crawler import TrafilaturaCrawler
-from core.crawler.link_discoverer import LinkDiscoverer
+from core.crawler.trafilatura_link_discoverer import TrafilaturaLinkDiscoverer
 from core.crawler.content_extractor import ContentExtractor
 from core.storage.database_manager import DatabaseManager
 from core.domain_manager import DomainManager
@@ -39,12 +39,14 @@ class CrawlerExecutor:
     async def initialize(self):
         """Inizializza il crawler"""
         self.crawler = TrafilaturaCrawler()
+        # Inizializza manualmente i componenti del crawler
+        await self.crawler.__aenter__()
         logger.info("Crawler inizializzato")
     
     async def cleanup(self):
         """Cleanup risorse"""
-        if self.crawler and hasattr(self.crawler, 'db_manager') and self.crawler.db_manager:
-            await self.crawler.db_manager.close()
+        if self.crawler:
+            await self.crawler.__aexit__(None, None, None)
             logger.info("Crawler disconnesso")
     
     def get_active_domains_from_crawling_config(self) -> List[str]:

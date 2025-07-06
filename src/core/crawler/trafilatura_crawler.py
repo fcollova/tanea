@@ -9,8 +9,9 @@ import os
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 
-from .link_discoverer import LinkDiscoverer
+from .trafilatura_link_discoverer import TrafilaturaLinkDiscoverer
 from .content_extractor import ContentExtractor
+from .rate_limiter import AdvancedRateLimiter
 from ..storage.database_manager import DatabaseManager
 from ..config import get_crawler_config
 from ..log import get_news_logger
@@ -28,6 +29,7 @@ class TrafilaturaCrawler:
         self.link_discoverer = None
         self.content_extractor = None
         self.db_manager = None
+        self.rate_limiter = AdvancedRateLimiter()
         
         # Carica configurazione siti
         self.sites_config = self._load_sites_config()
@@ -44,15 +46,30 @@ class TrafilaturaCrawler:
         }
     
     def _load_sites_config(self) -> Dict[str, Any]:
-        """Carica configurazione siti da web_scraping.yaml"""
+        """Carica configurazione siti da web_crawling.yaml"""
         try:
             config_path = os.path.join(
-                os.path.dirname(__file__), '..', '..', 'config', 'web_scraping.yaml'
+                os.path.dirname(__file__), '..', '..', 'config', 'web_crawling.yaml'
             )
             
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
-                logger.info(f"Configurazione siti caricata: {len(config.get('sites', {}))} siti")
+                # Estrai siti dalla struttura crawling_sites
+                crawling_sites = config.get('crawling_sites', {})
+                all_sites = {}
+                
+                # Converti struttura dominio->siti in siti flat
+                for domain, domain_config in crawling_sites.items():
+                    sites = domain_config.get('sites', {})
+                    for site_key, site_config in sites.items():
+                        # Aggiungi informazioni sul dominio al sito
+                        site_config_copy = site_config.copy()
+                        site_config_copy['domain'] = domain
+                        all_sites[site_key] = site_config_copy
+                
+                # Aggiungi mapping domini per compatibilità
+                config['sites'] = all_sites
+                logger.info(f"Configurazione siti caricata: {len(all_sites)} siti da {len(crawling_sites)} domini")
                 return config
                 
         except Exception as e:
@@ -62,7 +79,7 @@ class TrafilaturaCrawler:
     async def __aenter__(self):
         """Context manager entry - inizializza componenti"""
         # Inizializza componenti
-        self.link_discoverer = LinkDiscoverer()
+        self.link_discoverer = TrafilaturaLinkDiscoverer()
         self.content_extractor = ContentExtractor()
         self.db_manager = DatabaseManager(self.environment)
         
@@ -92,13 +109,14 @@ class TrafilaturaCrawler:
     # ========================================================================
     
     async def crawl_all_sites(self, site_names: List[str] = None, 
-                            domain_filter: str = None) -> Dict[str, Any]:
+                            domain_filter: str = None, max_links_per_site: int = None) -> Dict[str, Any]:
         """
         Crawla tutti i siti configurati
         
         Args:
             site_names: Lista nomi siti specifici (None = tutti)
             domain_filter: Filtra solo siti per questo dominio
+            max_links_per_site: Limite massimo link per sito (sovrascrive config)
             
         Returns:
             dict: Statistiche crawling
@@ -106,24 +124,36 @@ class TrafilaturaCrawler:
         self.crawl_stats['start_time'] = datetime.now()
         logger.info("Inizio crawling completo tutti i siti")
         
-        sites_to_crawl = self._get_sites_to_crawl(site_names, domain_filter)
+        # Aggiorna temporaneamente la configurazione se max_links_per_site è specificato
+        original_config = None
+        if max_links_per_site is not None:
+            original_config = self.config.get('max_articles_per_site', 20)
+            self.config['max_articles_per_site'] = max_links_per_site
         
-        for site_name, site_config in sites_to_crawl.items():
-            try:
-                logger.info(f"Crawling sito: {site_name}")
-                await self._crawl_single_site(site_name, site_config)
-                self.crawl_stats['sites_processed'] += 1
-                
-            except Exception as e:
-                logger.error(f"Errore crawling sito {site_name}: {e}")
-                self.crawl_stats['errors'] += 1
-                continue
+        try:
+            sites_to_crawl = self._get_sites_to_crawl(site_names, domain_filter)
         
-        self.crawl_stats['end_time'] = datetime.now()
-        duration = (self.crawl_stats['end_time'] - self.crawl_stats['start_time']).total_seconds()
+            for site_name, site_config in sites_to_crawl.items():
+                try:
+                    logger.info(f"Crawling sito: {site_name}")
+                    await self._crawl_single_site(site_name, site_config)
+                    self.crawl_stats['sites_processed'] += 1
+                    
+                except Exception as e:
+                    logger.error(f"Errore crawling sito {site_name}: {e}")
+                    self.crawl_stats['errors'] += 1
+                    continue
+            
+            self.crawl_stats['end_time'] = datetime.now()
+            duration = (self.crawl_stats['end_time'] - self.crawl_stats['start_time']).total_seconds()
+            
+            logger.info(f"Crawling completato in {duration:.1f}s: {self.crawl_stats}")
+            return self.crawl_stats
         
-        logger.info(f"Crawling completato in {duration:.1f}s: {self.crawl_stats}")
-        return self.crawl_stats
+        finally:
+            # Ripristina configurazione originale
+            if original_config is not None:
+                self.config['max_articles_per_site'] = original_config
     
     async def _crawl_single_site(self, site_name: str, site_config: Dict[str, Any]):
         """Crawla un singolo sito: discovery + extraction + storage"""
@@ -146,13 +176,21 @@ class TrafilaturaCrawler:
             self.crawl_stats['links_discovered'] += added_count
             
             # 4. Recupera link da crawlare (nuovi + alcuni vecchi)
+            max_links = self.config.get('max_articles_per_site', 20)
             links_to_crawl = await self.db_manager.link_db.get_links_to_crawl(
                 site_id=site_db.id,
-                limit=self.config.get('max_articles_per_site', 20)
+                limit=max_links
             )
             
+            logger.info(f"Sito {site_name}: richiesti max {max_links} link, ottenuti {len(links_to_crawl)} link da crawlare")
+            
+            # Log dei link da crawlare
+            for i, link in enumerate(links_to_crawl, 1):
+                logger.info(f"  ToCrawl[{i}]: {link.url}")
+                logger.debug(f"    Status: {link.status}, ID: {link.id}")
+            
             if not links_to_crawl:
-                logger.info(f"Nessun link da crawlare per {site_name}")
+                logger.warning(f"Nessun link da crawlare per {site_name} - verifica stato link nel database")
                 return
             
             # 5. Content Extraction
@@ -169,12 +207,15 @@ class TrafilaturaCrawler:
         try:
             # Determina dominio dal mapping
             domain = self._determine_domain_for_site(site_config)
+            logger.info(f"Inizio processing {len(links_to_crawl)} link per dominio: {domain}")
             
             # Process link in piccoli batch per non sovraccaricare
             batch_size = min(5, self.config.get('max_concurrent', 3))
+            logger.info(f"Batch size configurato: {batch_size}")
             
             for i in range(0, len(links_to_crawl), batch_size):
                 batch = links_to_crawl[i:i + batch_size]
+                logger.info(f"Processing batch {i//batch_size + 1}: {len(batch)} link")
                 await self._process_links_batch(batch, domain)
                 
                 # Piccola pausa tra batch
@@ -186,31 +227,42 @@ class TrafilaturaCrawler:
     
     async def _process_links_batch(self, batch_links: List, domain: str):
         """Processa un piccolo batch di link"""
+        logger.info(f"_process_links_batch chiamato con {len(batch_links)} link")
         tasks = []
         
         for link_record in batch_links:
+            logger.info(f"Creando task per link: {link_record.url}")
             task = self._process_single_link(link_record, domain)
             tasks.append(task)
         
+        logger.info(f"Eseguendo {len(tasks)} task concorrenti")
         # Esegui estrazione concorrente limitata
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
+        logger.info(f"Task completati, processing {len(results)} risultati")
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 logger.error(f"Errore processing link {batch_links[i].url}: {result}")
                 self.crawl_stats['errors'] += 1
+            else:
+                logger.info(f"Link {batch_links[i].url} processato con successo")
     
     async def _process_single_link(self, link_record, domain: str):
         """Processa un singolo link: extraction + storage"""
         try:
+            logger.info(f"Inizio processing link: {link_record.url}")
+            
             # 1. Marca link come in crawling
             await self.db_manager.link_db.mark_link_crawling(link_record.id)
+            logger.info(f"Link marcato come in crawling: {link_record.id}")
             
             # 2. Estrai contenuto
+            logger.info(f"Inizio estrazione contenuto per: {link_record.url}")
             article_data = await self.content_extractor.extract_article(
                 url=link_record.url,
                 domain=domain
             )
+            logger.info(f"Estrazione completata, risultato: {bool(article_data)}")
             
             if not article_data:
                 await self.db_manager.link_db.mark_link_crawled(
@@ -228,7 +280,7 @@ class TrafilaturaCrawler:
             
             if success:
                 self.crawl_stats['articles_extracted'] += 1
-                logger.debug(f"Articolo salvato: {article_data['title'][:50]}...")
+                logger.info(f"Articolo salvato: {article_data['title'][:50]}...")
             
             self.crawl_stats['links_crawled'] += 1
             
@@ -262,10 +314,9 @@ class TrafilaturaCrawler:
         
         # Filtra per dominio se specificato
         if domain_filter:
-            domain_mapping = self.sites_config.get('domain_mapping', {})
-            domain_sites = domain_mapping.get(domain_filter.lower(), [])
+            # Filtra siti per dominio usando il campo 'domain' aggiunto durante il load
             sites = {name: config for name, config in sites.items() 
-                    if name in domain_sites}
+                    if config.get('domain') == domain_filter.lower()}
         
         # Filtra solo siti attivi
         active_sites = {name: config for name, config in sites.items() 
@@ -296,38 +347,62 @@ class TrafilaturaCrawler:
     
     def _determine_domain_for_site(self, site_config: Dict[str, Any]) -> str:
         """Determina dominio appropriato per il sito"""
-        # Cerca nel mapping dominio
+        # METODO 1: Usa il campo 'domain' dalla nuova struttura web_crawling.yaml
+        if 'domain' in site_config:
+            domain = site_config['domain']
+            logger.debug(f"Dominio dal config: {domain}")
+            return domain
+        
+        # METODO 2: Cerca nel mapping dominio (per compatibilità)
         domain_mapping = self.sites_config.get('domain_mapping', {})
         site_name = site_config.get('name', '').lower()
         
-        for domain, sites in domain_mapping.items():
+        for domain, mapping_data in domain_mapping.items():
+            sites = mapping_data.get('sites', []) if isinstance(mapping_data, dict) else []
             if any(site_name in s.lower() for s in sites):
+                logger.debug(f"Dominio dal mapping: {domain}")
                 return domain
         
-        # Fallback basato sul nome sito
+        # METODO 3: Fallback basato sul nome sito
         site_name_lower = site_name.lower()
-        if any(term in site_name_lower for term in ['gazzetta', 'sport', 'calcio']):
+        if any(term in site_name_lower for term in ['gazzetta', 'sport', 'calcio', 'tuttomercato']):
+            logger.debug(f"Dominio da fallback: calcio")
             return 'calcio'
         elif any(term in site_name_lower for term in ['tech', 'tecnologia']):
             return 'tecnologia'
         elif any(term in site_name_lower for term in ['sole', 'economia', 'finanza']):
             return 'finanza'
         else:
+            logger.debug(f"Dominio default: general")
             return 'general'
     
     # ========================================================================
     # MODALITÀ SPECIFICHE
     # ========================================================================
     
-    async def crawl_domain(self, domain: str, max_articles: int = 50) -> Dict[str, Any]:
+    async def crawl_domain(self, domain: str, max_articles: int = 50, max_links_per_site: int = None) -> Dict[str, Any]:
         """Crawla solo siti di un dominio specifico"""
         logger.info(f"Crawling dominio: {domain}")
-        return await self.crawl_all_sites(domain_filter=domain)
+        # Se max_links_per_site è specificato, aggiorna temporaneamente la configurazione
+        if max_links_per_site is not None:
+            original_config = self.config.get('max_articles_per_site', 20)
+            self.config['max_articles_per_site'] = max_links_per_site
+            try:
+                result = await self.crawl_all_sites(domain_filter=domain)
+            finally:
+                self.config['max_articles_per_site'] = original_config
+            return result
+        else:
+            return await self.crawl_all_sites(domain_filter=domain)
     
     async def crawl_site(self, site_name: str) -> Dict[str, Any]:
         """Crawla un singolo sito specifico"""
         logger.info(f"Crawling sito singolo: {site_name}")
         return await self.crawl_all_sites(site_names=[site_name])
+    
+    async def crawl_single_site(self, site_name: str, max_links: int = None) -> Dict[str, Any]:
+        """Alias per crawl_site con parametro max_links per compatibilità"""
+        return await self.crawl_all_sites(site_names=[site_name], max_links_per_site=max_links)
     
     async def refresh_recent_content(self, hours_old: int = 24) -> Dict[str, Any]:
         """Re-crawla contenuti recenti per aggiornamenti"""
@@ -347,5 +422,8 @@ class TrafilaturaCrawler:
         
         if self.content_extractor:
             stats['extraction'] = self.content_extractor.get_extraction_stats()
+        
+        # Aggiungi statistiche rate limiting
+        stats['rate_limiting'] = self.rate_limiter.get_domain_stats()
         
         return stats
