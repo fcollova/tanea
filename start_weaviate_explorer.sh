@@ -73,8 +73,8 @@ else
     fi
     
     # Avvia Streamlit con output su file di log
-    echo -e "${YELLOW}📝 Log Streamlit: streamlit.log${NC}"
-    nohup streamlit run app.py --server.address 0.0.0.0 --server.port 8501 --server.headless true > streamlit.log 2>&1 &
+    echo -e "${YELLOW}📝 Log Streamlit: ../../logs/streamlit.log${NC}"
+    nohup streamlit run app.py --server.address 0.0.0.0 --server.port 8501 --server.headless true > ../../logs/streamlit.log 2>&1 &
     STREAMLIT_PID=$!
     
     # Attendi che Streamlit sia pronto
@@ -86,7 +86,7 @@ else
         echo -e "${GREEN}✅ Streamlit Dashboard avviato correttamente${NC}"
     else
         echo -e "${RED}❌ Problema con Streamlit Dashboard${NC}"
-        echo -e "${YELLOW}📋 Controllare streamlit.log per dettagli${NC}"
+        echo -e "${YELLOW}📋 Controllare ../../logs/streamlit.log per dettagli${NC}"
         exit 1
     fi
 fi

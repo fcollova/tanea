@@ -126,14 +126,21 @@ def main():
             
             # Filtro quality score
             if 'quality_score' in df_all.columns and not df_all['quality_score'].isna().all():
-                st.markdown("### ⭐ Quality Score")
-                min_quality = st.slider(
-                    "Quality minimo:",
-                    min_value=float(df_all['quality_score'].min()),
-                    max_value=float(df_all['quality_score'].max()),
-                    value=float(df_all['quality_score'].min()),
-                    step=0.1
-                )
+                quality_min = float(df_all['quality_score'].min())
+                quality_max = float(df_all['quality_score'].max())
+                
+                # Solo mostra slider se i valori sono diversi
+                if quality_min < quality_max:
+                    st.markdown("### ⭐ Quality Score")
+                    min_quality = st.slider(
+                        "Quality minimo:",
+                        min_value=quality_min,
+                        max_value=quality_max,
+                        value=quality_min,
+                        step=0.1
+                    )
+                else:
+                    min_quality = quality_min
             else:
                 min_quality = None
         else:

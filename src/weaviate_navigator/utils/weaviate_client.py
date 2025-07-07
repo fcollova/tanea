@@ -3,7 +3,7 @@ Weaviate Client Utilities per Jupyter Dashboard
 """
 
 import weaviate
-from weaviate.exceptions import WeaviateException
+from weaviate.exceptions import WeaviateBaseError
 import pandas as pd
 from typing import Dict, List, Optional, Any
 import json
@@ -17,10 +17,22 @@ class WeaviateExplorer:
         self.client = None
         self.connect()
     
+    def close(self):
+        """Chiude la connessione a Weaviate"""
+        if self.client:
+            self.client.close()
+            self.client = None
+    
     def connect(self) -> bool:
         """Connette a Weaviate"""
         try:
-            self.client = weaviate.Client(url=self.url)
+            # Extract host from URL
+            host = self.url.replace("http://", "").replace("https://", "").split(":")[0]
+            port = 8080
+            if ":" in self.url.replace("http://", "").replace("https://", ""):
+                port = int(self.url.replace("http://", "").replace("https://", "").split(":")[1])
+            
+            self.client = weaviate.connect_to_local(host=host, port=port)
             if self.client.is_ready():
                 print(f"✅ Connesso a Weaviate: {self.url}")
                 return True
@@ -38,19 +50,21 @@ class WeaviateExplorer:
             return {}
         
         try:
-            schema = self.client.schema.get()
-            classes = [cls['class'] for cls in schema.get('classes', [])]
+            # In v4, use collections to get schema info
+            collections = self.client.collections.list_all()
+            classes = [name for name in collections.keys()]
             
             info = {
                 'classes': classes,
-                'schema': schema
+                'schema': collections
             }
             
             # Conta oggetti per classe
             for class_name in classes:
                 try:
-                    result = self.client.query.aggregate(class_name).with_meta_count().do()
-                    count = result['data']['Aggregate'][class_name][0]['meta']['count']
+                    collection = self.client.collections.get(class_name)
+                    aggregate = collection.aggregate.over_all(total_count=True)
+                    count = aggregate.total_count
                     info[f'{class_name}_count'] = count
                 except:
                     info[f'{class_name}_count'] = 0
@@ -67,16 +81,23 @@ class WeaviateExplorer:
             return None
         
         try:
-            result = self.client.query.get(
-                self.index_name,
-                ['title', 'content', 'domain', 'source', 'published_date', 
-                 'url', 'author', 'quality_score', 'keywords']
-            ).with_limit(limit).do()
+            collection = self.client.collections.get(self.index_name)
             
-            articles = result['data']['Get'][self.index_name]
+            # Query all objects with specified properties
+            response = collection.query.fetch_objects(
+                return_properties=['title', 'content', 'domain', 'source', 'published_date', 
+                                 'url', 'author', 'quality_score', 'keywords'],
+                limit=limit
+            )
             
-            if not articles:
+            if not response.objects:
                 return None
+            
+            # Convert objects to list of dictionaries
+            articles = []
+            for obj in response.objects:
+                article = dict(obj.properties)
+                articles.append(article)
             
             df = pd.DataFrame(articles)
             
@@ -107,33 +128,37 @@ class WeaviateExplorer:
             return None
         
         try:
-            query_builder = self.client.query.get(
-                self.index_name,
-                ['title', 'content', 'domain', 'source', 'published_date', 
-                 'url', 'quality_score']
-            ).with_near_text({
-                'concepts': [query]
-            }).with_limit(limit).with_additional(['distance'])
+            import weaviate.classes as wvc
             
-            # Aggiungi filtro dominio se specificato
+            collection = self.client.collections.get(self.index_name)
+            
+            # Build the query
+            where_filter = None
             if domain_filter:
-                where_filter = {
-                    "path": ["domain"],
-                    "operator": "ContainsAny",
-                    "valueText": domain_filter
-                }
-                query_builder = query_builder.with_where(where_filter)
+                where_filter = wvc.query.Filter.by_property("domain").contains_any(domain_filter)
             
-            result = query_builder.do()
-            articles = result['data']['Get'][self.index_name]
+            response = collection.query.near_text(
+                query=query,
+                limit=limit,
+                return_properties=['title', 'content', 'domain', 'source', 'published_date', 
+                                 'url', 'quality_score'],
+                return_metadata=wvc.query.MetadataQuery(distance=True),
+                where=where_filter
+            )
             
-            if not articles:
+            if not response.objects:
                 return None
+            
+            # Convert objects to list of dictionaries
+            articles = []
+            for obj in response.objects:
+                article = dict(obj.properties)
+                article['similarity'] = 1 - obj.metadata.distance
+                articles.append(article)
             
             df = pd.DataFrame(articles)
             
-            # Calcola similarità
-            df['similarity'] = [1 - float(item['_additional']['distance']) for item in articles]
+            # Arrotonda similarità
             df['similarity'] = df['similarity'].round(3)
             
             # Ordina per similarità
@@ -151,22 +176,27 @@ class WeaviateExplorer:
             return None
         
         try:
-            where_filter = {
-                "path": ["domain"],
-                "operator": "Equal",
-                "valueText": domain
-            }
+            import weaviate.classes as wvc
             
-            result = self.client.query.get(
-                self.index_name,
-                ['title', 'content', 'domain', 'source', 'published_date', 
-                 'url', 'quality_score']
-            ).with_where(where_filter).with_limit(limit).do()
+            collection = self.client.collections.get(self.index_name)
             
-            articles = result['data']['Get'][self.index_name]
+            where_filter = wvc.query.Filter.by_property("domain").equal(domain)
             
-            if not articles:
+            response = collection.query.fetch_objects(
+                return_properties=['title', 'content', 'domain', 'source', 'published_date', 
+                                 'url', 'quality_score'],
+                where=where_filter,
+                limit=limit
+            )
+            
+            if not response.objects:
                 return None
+            
+            # Convert objects to list of dictionaries
+            articles = []
+            for obj in response.objects:
+                article = dict(obj.properties)
+                articles.append(article)
             
             return pd.DataFrame(articles)
             
@@ -180,25 +210,30 @@ class WeaviateExplorer:
             return None
         
         try:
+            import weaviate.classes as wvc
             from datetime import datetime, timedelta
-            cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
             
-            where_filter = {
-                "path": ["published_date"],
-                "operator": "GreaterThan",
-                "valueDate": cutoff_date
-            }
+            cutoff_date = datetime.now() - timedelta(days=days)
             
-            result = self.client.query.get(
-                self.index_name,
-                ['title', 'content', 'domain', 'source', 'published_date', 
-                 'url', 'quality_score']
-            ).with_where(where_filter).with_limit(limit).do()
+            collection = self.client.collections.get(self.index_name)
             
-            articles = result['data']['Get'][self.index_name]
+            where_filter = wvc.query.Filter.by_property("published_date").greater_than(cutoff_date)
             
-            if not articles:
+            response = collection.query.fetch_objects(
+                return_properties=['title', 'content', 'domain', 'source', 'published_date', 
+                                 'url', 'quality_score'],
+                where=where_filter,
+                limit=limit
+            )
+            
+            if not response.objects:
                 return None
+            
+            # Convert objects to list of dictionaries
+            articles = []
+            for obj in response.objects:
+                article = dict(obj.properties)
+                articles.append(article)
             
             df = pd.DataFrame(articles)
             df['published_date'] = pd.to_datetime(df['published_date'])
