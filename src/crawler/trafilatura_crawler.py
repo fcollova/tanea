@@ -12,9 +12,10 @@ from datetime import datetime
 from .trafilatura_link_discoverer import TrafilaturaLinkDiscoverer
 from .content_extractor import ContentExtractor
 from .rate_limiter import AdvancedRateLimiter
-from ..storage.database_manager import DatabaseManager
-from ..config import get_crawler_config
-from ..log import get_news_logger
+from core.storage.database_manager import DatabaseManager
+from core.config import get_crawler_config
+from core.domain_manager import DomainManager
+from core.log import get_news_logger
 
 logger = get_news_logger(__name__)
 
@@ -30,6 +31,7 @@ class TrafilaturaCrawler:
         self.content_extractor = None
         self.db_manager = None
         self.rate_limiter = AdvancedRateLimiter()
+        self.domain_manager = DomainManager()
         
         # Carica configurazione siti
         self.sites_config = self._load_sites_config()
@@ -49,7 +51,7 @@ class TrafilaturaCrawler:
         """Carica configurazione siti da web_crawling.yaml"""
         try:
             config_path = os.path.join(
-                os.path.dirname(__file__), '..', '..', 'config', 'web_crawling.yaml'
+                os.path.dirname(__file__), '..', 'config', 'web_crawling.yaml'
             )
             
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -70,11 +72,24 @@ class TrafilaturaCrawler:
                 # Aggiungi mapping domini per compatibilità
                 config['sites'] = all_sites
                 logger.info(f"Configurazione siti caricata: {len(all_sites)} siti da {len(crawling_sites)} domini")
+                
+                # Validation: almeno un sito deve essere configurato
+                if not all_sites:
+                    raise ValueError("Nessun sito configurato in web_crawling.yaml - verificare la configurazione")
+                
                 return config
                 
+        except FileNotFoundError as e:
+            logger.error(f"❌ File configurazione non trovato: {config_path}")
+            logger.error(f"   Assicurati che web_crawling.yaml sia presente in /src/config/")
+            raise FileNotFoundError(f"File configurazione mancante: {config_path}") from e
+        except yaml.YAMLError as e:
+            logger.error(f"❌ Errore parsing YAML in {config_path}: {e}")
+            raise ValueError(f"File YAML malformato: {config_path}") from e
         except Exception as e:
-            logger.error(f"Errore caricamento configurazione siti: {e}")
-            return {'sites': {}}
+            logger.error(f"❌ Errore caricamento configurazione siti: {e}")
+            logger.error(f"   Path tentato: {config_path}")
+            raise RuntimeError(f"Errore configurazione crawler: {e}") from e
     
     async def __aenter__(self):
         """Context manager entry - inizializza componenti"""
@@ -158,6 +173,15 @@ class TrafilaturaCrawler:
     async def _crawl_single_site(self, site_name: str, site_config: Dict[str, Any]):
         """Crawla un singolo sito: discovery + extraction + storage"""
         try:
+            # 0. Verifica dominio PRIMA di iniziare qualsiasi operazione
+            try:
+                domain = self._determine_domain_for_site(site_config)
+                logger.info(f"Sito {site_name} assegnato al dominio: {domain}")
+            except ValueError as domain_error:
+                logger.error(f"❌ SKIP sito {site_name}: {domain_error}")
+                self.crawl_stats['errors'] += 1
+                return  # Skip questo sito invece di crashare tutto il crawling
+            
             # 1. Assicura che il sito sia nel database
             site_db = await self._ensure_site_in_database(site_name, site_config)
             
@@ -193,8 +217,8 @@ class TrafilaturaCrawler:
                 logger.warning(f"Nessun link da crawlare per {site_name} - verifica stato link nel database")
                 return
             
-            # 5. Content Extraction
-            await self._crawl_links_batch(links_to_crawl, site_config)
+            # 5. Content Extraction (usa il dominio già verificato)
+            await self._crawl_links_batch(links_to_crawl, domain)
             
             logger.info(f"Sito {site_name} completato: {len(links_to_crawl)} link processati")
             
@@ -202,11 +226,9 @@ class TrafilaturaCrawler:
             logger.error(f"Errore crawling sito {site_name}: {e}")
             raise
     
-    async def _crawl_links_batch(self, links_to_crawl: List, site_config: Dict[str, Any]):
+    async def _crawl_links_batch(self, links_to_crawl: List, domain: str):
         """Crawla batch di link con extraction e storage"""
         try:
-            # Determina dominio dal mapping
-            domain = self._determine_domain_for_site(site_config)
             logger.info(f"Inizio processing {len(links_to_crawl)} link per dominio: {domain}")
             
             # Process link in piccoli batch per non sovraccaricare
@@ -256,11 +278,22 @@ class TrafilaturaCrawler:
             await self.db_manager.link_db.mark_link_crawling(link_record.id)
             logger.info(f"Link marcato come in crawling: {link_record.id}")
             
-            # 2. Estrai contenuto
+            # 2. Ottieni keywords del dominio per filtraggio
+            domain_keywords = []
+            if domain and self.domain_manager:
+                domain_config = self.domain_manager.get_domain(domain)
+                if domain_config:
+                    domain_keywords = domain_config.keywords
+                    logger.debug(f"Keywords dominio {domain}: {len(domain_keywords)} keywords")
+                else:
+                    logger.warning(f"Configurazione dominio {domain} non trovata")
+            
+            # 3. Estrai contenuto con filtraggio keywords
             logger.info(f"Inizio estrazione contenuto per: {link_record.url}")
             article_data = await self.content_extractor.extract_article(
                 url=link_record.url,
-                domain=domain
+                domain=domain,
+                keywords=domain_keywords
             )
             logger.info(f"Estrazione completata, risultato: {bool(article_data)}")
             
@@ -351,6 +384,21 @@ class TrafilaturaCrawler:
         if 'domain' in site_config:
             domain = site_config['domain']
             logger.debug(f"Dominio dal config: {domain}")
+            
+            # Verifica che il dominio sia configurato e attivo in domains.yaml
+            if not self.domain_manager.domain_exists(domain, active_only=True):
+                site_name = site_config.get('name', 'Unknown')
+                if self.domain_manager.domain_exists(domain, active_only=False):
+                    logger.error(f"❌ ERRORE: Dominio '{domain}' per sito '{site_name}' esiste ma NON È ATTIVO in domains.yaml")
+                else:
+                    logger.error(f"❌ ERRORE: Dominio '{domain}' per sito '{site_name}' NON ESISTE in domains.yaml")
+                
+                logger.error(f"❌ Domini attivi disponibili: {self.domain_manager.get_domain_list(active_only=True)}")
+                raise ValueError(
+                    f"Dominio '{domain}' per sito '{site_name}' non valido o non attivo. "
+                    f"Verifica domains.yaml e assicurati che il dominio sia attivo."
+                )
+            
             return domain
         
         # METODO 2: Cerca nel mapping dominio (per compatibilità)
@@ -361,20 +409,40 @@ class TrafilaturaCrawler:
             sites = mapping_data.get('sites', []) if isinstance(mapping_data, dict) else []
             if any(site_name in s.lower() for s in sites):
                 logger.debug(f"Dominio dal mapping: {domain}")
+                # Verifica che il dominio sia attivo in domains.yaml
+                if not self.domain_manager.is_domain_active(domain):
+                    logger.warning(f"Dominio '{domain}' trovato nel mapping ma NON ATTIVO in domains.yaml per sito {site_config.get('name', 'Unknown')}")
+                    # Continua la ricerca invece di usare dominio inattivo
+                    continue
                 return domain
         
-        # METODO 3: Fallback basato sul nome sito
+        # METODO 3: Fallback basato sul nome sito (deprecato)
         site_name_lower = site_name.lower()
         if any(term in site_name_lower for term in ['gazzetta', 'sport', 'calcio', 'tuttomercato']):
-            logger.debug(f"Dominio da fallback: calcio")
+            logger.warning(f"Dominio da fallback per {site_config.get('name', 'Unknown')}: calcio - AGGIORNA LA CONFIGURAZIONE!")
             return 'calcio'
         elif any(term in site_name_lower for term in ['tech', 'tecnologia']):
+            logger.warning(f"Dominio da fallback per {site_config.get('name', 'Unknown')}: tecnologia - AGGIORNA LA CONFIGURAZIONE!")
             return 'tecnologia'
         elif any(term in site_name_lower for term in ['sole', 'economia', 'finanza']):
+            logger.warning(f"Dominio da fallback per {site_config.get('name', 'Unknown')}: finanza - AGGIORNA LA CONFIGURAZIONE!")
             return 'finanza'
         else:
-            logger.debug(f"Dominio default: general")
-            return 'general'
+            # ERRORE: Nessun dominio configurato
+            site_name = site_config.get('name', 'Unknown')
+            base_url = site_config.get('base_url', 'Unknown')
+            logger.error(f"❌ ERRORE CONFIGURAZIONE: Nessun dominio trovato per sito '{site_name}' ({base_url})")
+            logger.error(f"❌ Soluzioni possibili:")
+            logger.error(f"   1. Aggiungi campo 'domain' nella configurazione del sito in web_crawling.yaml")
+            logger.error(f"   2. Aggiungi il sito nel domain_mapping in web_crawling.yaml")
+            logger.error(f"   3. Verifica che il sito sia sotto il dominio corretto nella struttura YAML")
+            logger.error(f"❌ Domini disponibili: {list(self.domain_manager.get_all_domains().keys())}")
+            
+            # Lancia eccezione invece di ritornare "general"
+            raise ValueError(
+                f"Dominio non configurato per sito '{site_name}' ({base_url}). "
+                f"Aggiorna web_crawling.yaml per assegnare il sito a un dominio valido."
+            )
     
     # ========================================================================
     # MODALITÀ SPECIFICHE

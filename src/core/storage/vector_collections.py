@@ -221,7 +221,17 @@ class VectorCollections:
             )
             
             logger.info(f"Articolo salvato in Weaviate: {article_data.get('title', 'No title')[:50]}...")
-            return str(result.uuid)
+            
+            # In Weaviate v4, result può essere direttamente l'UUID o un oggetto
+            if hasattr(result, 'uuid'):
+                uuid_str = str(result.uuid)
+                logger.debug(f"UUID estratto da result.uuid: {uuid_str}")
+                return uuid_str
+            else:
+                # result è probabilmente già l'UUID
+                uuid_str = str(result)
+                logger.debug(f"UUID estratto direttamente da result: {uuid_str}")
+                return uuid_str
             
         except Exception as e:
             logger.error(f"Errore salvataggio articolo in Weaviate: {e}")

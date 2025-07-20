@@ -48,9 +48,31 @@ st.markdown("""
     }
     .metric-card {
         background-color: #f8f9fa;
+    }
+    .content-preview {
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        padding: 1rem;
+        background-color: #f8f9fa;
+        margin: 0.5rem 0;
+    }
+    .article-container {
         padding: 1rem;
         border-radius: 0.5rem;
         border-left: 4px solid #1f77b4;
+        background-color: #f8f9fa;
+        margin: 0.5rem 0;
+    }
+    .content-area {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        line-height: 1.4;
+    }
+    .article-title {
+        color: #1f77b4;
+        border-bottom: 2px solid #e9ecef;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1rem;
     }
     .sidebar-info {
         background-color: #e8f4fd;
@@ -224,10 +246,63 @@ def main():
         ].head(max_rows)
         
         if len(filtered_df) > 0:
+            # Mostra articoli in formato compatto con contenuto a fianco
+            st.markdown("### 📄 Articoli con Contenuto")
+            
+            for idx, row in filtered_df.head(20).iterrows():  # Mostra solo prime 20 per performance
+                # Container per ogni articolo
+                with st.container():
+                    # Titolo dell'articolo
+                    st.markdown(f'<div class="article-title">📰 {row.get("title", "Titolo non disponibile")}</div>', 
+                              unsafe_allow_html=True)
+                    
+                    # Layout a due colonne: info a sinistra, contenuto a destra
+                    col_info, col_content = st.columns([1, 2])
+                    
+                    with col_info:
+                        st.markdown("**📊 Informazioni:**")
+                        info_text = f"""
+                        - **Dominio:** {row.get('domain', 'N/A')}
+                        - **Fonte:** {row.get('source', 'N/A')}
+                        """
+                        if 'date' in row and pd.notna(row['date']):
+                            info_text += f"- **Data:** {row['date']}\n"
+                        if 'quality_score' in row and pd.notna(row['quality_score']):
+                            info_text += f"- **Quality:** {row['quality_score']:.2f}\n"
+                        
+                        st.markdown(info_text)
+                        
+                        # Link alla fonte
+                        if 'url' in row and row['url']:
+                            st.markdown(f"🔗 [Fonte originale]({row['url']})")
+                    
+                    with col_content:
+                        st.markdown("**📄 Contenuto:**")
+                        content = row.get('content', '')
+                        
+                        if content and str(content).strip():
+                            # Mostra contenuto in text area scrollabile
+                            st.text_area(
+                                f"Contenuto articolo ({len(str(content))} caratteri):",
+                                value=str(content),
+                                height=200,
+                                key=f"content_display_{idx}",
+                                disabled=True,
+                                label_visibility="collapsed"
+                            )
+                        else:
+                            st.warning("⚠️ Contenuto non disponibile")
+                            st.info("Il contenuto potrebbe non essere stato estratto correttamente.")
+                    
+                    # Separatore tra articoli
+                    st.markdown("---")
+            
+            # Tabella completa per export
+            st.markdown("### 📊 Tabella Completa (per Export)")
             st.dataframe(
                 filtered_df[display_columns],
                 use_container_width=True,
-                height=400
+                height=300
             )
             
             # Export controls

@@ -196,6 +196,7 @@ class Config:
             'max_concurrent': self.get('crawler', 'max_concurrent', 3, int),
             'timeout': self.get('crawler', 'timeout', 15, int),
             'max_retries': self.get('crawler', 'max_retries', 3, int),
+            'verify_ssl': self.get('crawler', 'verify_ssl', True, bool),
             
             # Rate limiting avanzato
             'rate_limit_enabled': self.get('crawler', 'rate_limit_enabled', True, bool),
@@ -246,8 +247,17 @@ class Config:
             
             return combined_config
             
+        except FileNotFoundError:
+            logger.warning(f"⚠️  File YAML non trovato: {yaml_path}")
+            logger.warning(f"   Usando solo configurazione da config.* (funzionalità limitate)")
+            return base_config
+        except yaml.YAMLError as e:
+            logger.error(f"❌ Errore parsing YAML in {yaml_path}: {e}")
+            logger.error(f"   Controlla la sintassi del file YAML")
+            return base_config
         except Exception as e:
-            logger.error(f"Errore caricamento {yaml_file}: {e}")
+            logger.error(f"❌ Errore caricamento {yaml_file}: {e}")
+            logger.error(f"   Path tentato: {yaml_path}")
             return base_config
 
 # Istanza globale di configurazione

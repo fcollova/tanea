@@ -71,7 +71,17 @@ def perform_semantic_search(_explorer, query, limit, domain_filter=None):
 
 @st.cache_data(ttl=300)
 def load_articles_for_filtering(_explorer, limit=1000):
-    return _explorer.get_all_articles(limit=limit)
+    """Carica articoli per filtri SENZA contenuto per performance cache"""
+    df = _explorer.get_all_articles(limit=limit)
+    
+    if df is not None:
+        # Rimuovi completamente la colonna content per evitare problemi cache
+        # La useremo solo per la ricerca semantica, non per i filtri
+        df = df.copy()
+        if 'content' in df.columns:
+            df = df.drop('content', axis=1)
+        
+    return df
 
 def get_similarity_class(score):
     if score >= 0.8:
@@ -98,9 +108,13 @@ def main():
     with st.sidebar:
         st.markdown("## 🔧 Filtri di Ricerca")
         
-        # Carica dati per filtri
-        with st.spinner("Caricamento filtri..."):
-            df_all = load_articles_for_filtering(explorer, limit=1000)
+        # Carica dati per filtri con gestione errori robusta
+        try:
+            with st.spinner("Caricamento filtri..."):
+                df_all = load_articles_for_filtering(explorer, limit=1000)
+        except Exception as e:
+            st.error(f"❌ Errore caricamento filtri: {e}")
+            df_all = None
         
         if df_all is not None:
             # Filtro domini
@@ -112,16 +126,28 @@ def main():
                 help="Seleziona i domini in cui cercare"
             )
             
-            # Filtro date
-            if 'date' in df_all.columns:
-                st.markdown("### 📅 Periodo")
-                date_range = st.date_input(
-                    "Seleziona periodo:",
-                    value=(df_all['date'].min(), df_all['date'].max()),
-                    min_value=df_all['date'].min(),
-                    max_value=df_all['date'].max()
-                )
-            else:
+            # Filtro date con gestione errori
+            try:
+                if 'date' in df_all.columns and not df_all['date'].isna().all():
+                    st.markdown("### 📅 Periodo")
+                    min_date = df_all['date'].min()
+                    max_date = df_all['date'].max()
+                    
+                    # Verifica che le date siano valide
+                    if pd.notna(min_date) and pd.notna(max_date):
+                        date_range = st.date_input(
+                            "Seleziona periodo:",
+                            value=(min_date, max_date),
+                            min_value=min_date,
+                            max_value=max_date
+                        )
+                    else:
+                        date_range = None
+                        st.info("📅 Date non disponibili per il filtro")
+                else:
+                    date_range = None
+            except Exception as e:
+                st.warning(f"⚠️ Problema con filtro date: {e}")
                 date_range = None
             
             # Filtro quality score
@@ -153,8 +179,7 @@ def main():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        # Search box
-        st.markdown('<div class="search-box">', unsafe_allow_html=True)
+        # Search box senza HTML custom che può causare problemi
         st.markdown("### 🔍 Ricerca Semantica")
         
         # Input ricerca
@@ -179,7 +204,7 @@ def main():
             st.markdown("<br>", unsafe_allow_html=True)  # Spacing
             search_clicked = st.button("🔍 Cerca", type="primary", use_container_width=True)
         
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("---")  # Separatore semplice invece del div
         
         # Esegui ricerca
         if search_clicked or search_query:
@@ -252,16 +277,49 @@ def main():
                                         pub_date = pd.to_datetime(row['published_date']).strftime("%d/%m/%Y")
                                         st.text(f"📅 {pub_date}")
                                 
-                                # Contenuto preview
+                                # Contenuto con espansione dinamica della stessa casella
                                 if 'content' in row and row['content']:
-                                    content_preview = row['content'][:300] + "..." if len(row['content']) > 300 else row['content']
-                                    st.text_area(
-                                        "Anteprima contenuto:",
-                                        content_preview,
-                                        height=100,
-                                        key=f"content_{idx}",
-                                        disabled=True
-                                    )
+                                    full_content = str(row['content'])
+                                    is_expanded = st.session_state.get(f'content_expanded_{idx}', False)
+                                    
+                                    # Determina contenuto e altezza in base allo stato
+                                    if is_expanded:
+                                        display_content = full_content
+                                        text_height = min(max(len(full_content) // 80, 200), 600)  # Altezza dinamica
+                                        label_text = f"Contenuto completo ({len(full_content)} caratteri):"
+                                    else:
+                                        display_content = full_content[:300] + "..." if len(full_content) > 300 else full_content
+                                        text_height = 100
+                                        label_text = "Anteprima contenuto:"
+                                    
+                                    col_content, col_button = st.columns([4, 1])
+                                    
+                                    with col_content:
+                                        st.text_area(
+                                            label_text,
+                                            display_content,
+                                            height=text_height,
+                                            key=f"content_display_{idx}_{is_expanded}",  # Key diversa per forzare re-render
+                                            disabled=True
+                                        )
+                                    
+                                    with col_button:
+                                        if len(full_content) > 300:
+                                            if not is_expanded:
+                                                # Usa session_state direttamente invece di callback per evitare bug closure
+                                                if st.button("📖 Espandi", key=f"expand_{idx}", use_container_width=True):
+                                                    st.session_state[f'content_expanded_{idx}'] = True
+                                                    st.rerun()
+                                            else:
+                                                if st.button("📄 Comprimi", key=f"collapse_{idx}", use_container_width=True):
+                                                    st.session_state[f'content_expanded_{idx}'] = False
+                                                    st.rerun()
+                                                
+                                            # Mostra info lunghezza quando espanso
+                                            if is_expanded:
+                                                st.caption(f"📊 {len(full_content)} caratteri")
+                                        else:
+                                            st.caption("📄 Contenuto breve")
                                 
                                 # Link
                                 if 'url' in row and row['url']:

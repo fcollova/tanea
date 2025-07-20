@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "report_generated": "2025-07-07 12:08:18",
+    "operation_type": "CRAWL",
+    "generator": "TaneaCrawler ReportGenerator",
+    "version": "1.0"
+  },
+  "summary": {
+    "operation_type": "CRAWL",
+    "timestamp": "2025-07-07 12:08:18",
+    "start_time": "2025-07-07 12:07:55",
+    "end_time": "2025-07-07 12:08:18",
+    "duration_seconds": 22.689189,
+    "duration_formatted": "22.7s",
+    "sites_processed": 1,
+    "links_discovered": 0,
+    "links_crawled": 0,
+    "articles_extracted": 0,
+    "errors_count": 0,
+    "success_rate": "0.0%",
+    "extraction_rate": "0.0%",
+    "avg_articles_per_site": "0.0"
+  },
+  "sites_details": [
+    {
+      "site_key": "domain_calcio",
+      "links_discovered": 0,
+      "links_crawled": 0,
+      "articles_extracted": 0,
+      "errors": 0,
+      "success_rate": "0.0%",
+      "status": "FAILED"
+    }
+  ]
+}

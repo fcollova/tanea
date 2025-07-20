@@ -1,0 +1,29 @@
+# CRAWLER REPORT - DISCOVERY
+# Generated:,2025-07-07 11:56:32
+
+=== SUMMARY ===
+Parameter,Value
+Operation Type,DISCOVERY
+Timestamp,2025-07-07 11:56:32
+Total Sites Processed,1
+Total Links Discovered,50
+Domains Processed,1
+Domain List,calcio
+Errors Count,0
+Success Rate,100.0%
+Avg Links Per Site,50.0
+
+=== SITES DETAILS ===
+site_key,site_name,domain,links_discovered,pages_processed,status,pages_detail
+calcio_tuttomercatoweb,tuttomercatoweb,calcio,50,2,SUCCESS,"{
+  ""serie_a"": {
+    ""url"": ""https://www.tuttomercatoweb.com/serie-a"",
+    ""links_found"": 10,
+    ""max_links"": 10
+  },
+  ""calciomercato"": {
+    ""url"": ""https://www.tuttomercatoweb.com/calciomercato"",
+    ""links_found"": 8,
+    ""max_links"": 8
+  }
+}"

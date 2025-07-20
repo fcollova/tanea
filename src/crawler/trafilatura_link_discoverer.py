@@ -17,9 +17,10 @@ except ImportError:
     TRAFILATURA_AVAILABLE = False
     BeautifulSoup = None
 
-from ..config import get_config, get_web_crawling_config
-from ..domain_manager import DomainManager
-from ..log import get_news_logger
+from core.config import get_config, get_web_crawling_config
+from core.domain_manager import DomainManager
+from core.log import get_news_logger
+from .keyword_filter import KeywordFilter
 
 logger = get_news_logger(__name__)
 
@@ -30,6 +31,7 @@ class TrafilaturaLinkDiscoverer:
         self.config = get_config()
         self.crawling_config = get_web_crawling_config()
         self.domain_manager = DomainManager()
+        self.keyword_filter = KeywordFilter(debug=False)
         
         # Parametri spider da configurazione
         self.spider_max_depth = self.crawling_config.get('spider_max_depth', 2)
@@ -41,7 +43,25 @@ class TrafilaturaLinkDiscoverer:
         # Cache per evitare duplicati nella sessione
         self.discovered_urls = set()
         
+        # Configurazione SSL per trafilatura nel link discoverer
+        self._setup_ssl_configuration()
+        
         logger.info(f"Trafilatura Focused Crawler configurato: max_depth={self.spider_max_depth}, max_pages={self.spider_max_pages}, max_known={self.spider_max_known_urls}, language={self.spider_language}")
+    
+    def _setup_ssl_configuration(self):
+        """Configura SSL per le richieste trafilatura nel link discoverer"""
+        try:
+            crawler_config = get_crawler_config()
+            verify_ssl = crawler_config.get('verify_ssl', True)
+            
+            if not verify_ssl:
+                logger.info("SSL verification disabilitata per LinkDiscoverer")
+                # Disabilita warnings SSL per trafilatura
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                
+        except Exception as e:
+            logger.debug(f"Errore configurazione SSL LinkDiscoverer: {e}")
     
     async def __aenter__(self):
         """Context manager entry"""
@@ -194,6 +214,7 @@ class TrafilaturaLinkDiscoverer:
                 domain_config = self.domain_manager.get_domain(domain)
                 if domain_config:
                     domain_keywords = [kw.lower() for kw in domain_config.keywords]
+                    logger.debug(f"Filtraggio con {len(domain_keywords)} keywords dominio {domain}")
             
             filtered_links = []
             base_domain = urlparse(base_url).netloc
@@ -212,13 +233,18 @@ class TrafilaturaLinkDiscoverer:
                 if url_domain != base_domain:
                     continue
                 
-                # Verifica rilevanza per il dominio
+                # Verifica rilevanza per il dominio (include filtraggio per keywords)
                 if self._is_relevant_for_domain(normalized_url, domain_keywords):
                     if normalized_url not in self.discovered_urls:
                         filtered_links.append(normalized_url)
                         self.discovered_urls.add(normalized_url)
+                        logger.debug(f"Link accettato: {normalized_url}")
+                    else:
+                        logger.debug(f"Link duplicato: {normalized_url}")
+                else:
+                    logger.debug(f"Link rifiutato per rilevanza: {normalized_url}")
             
-            logger.debug(f"Filtrati {len(filtered_links)} link rilevanti da {len(spider_results)} totali")
+            logger.info(f"Filtrati {len(filtered_links)} link rilevanti da {len(spider_results)} totali per dominio {domain}")
             return filtered_links
             
         except Exception as e:
@@ -314,14 +340,22 @@ class TrafilaturaLinkDiscoverer:
             return []
     
     async def _extract_articles_from_categories(self, base_url: str, site_name: str, domain: str) -> List[str]:
-        """Estrae link articoli dalle pagine categoria conosciute"""
+        """Estrae link articoli dalle pagine categoria principali"""
         try:
+            # Ottieni keywords del dominio per filtraggio
+            domain_keywords = []
+            if domain:
+                domain_config = self.domain_manager.get_domain(domain)
+                if domain_config:
+                    domain_keywords = [kw.lower() for kw in domain_config.keywords]
+                    logger.info(f"Filtraggio categorie con {len(domain_keywords)} keywords dominio {domain}")
+            
+            # Usa le principali pagine categoria automaticamente dalla sitemap o struttura sito
             category_pages = [
-                f"{base_url}/l-angolo-di-calcio2000",
-                f"{base_url}/l-intervista",
-                f"{base_url}/la-legge-del-gol",
-                f"{base_url}/serie-a",
-                f"{base_url}/calciomercato"
+                f"{base_url}/",  # Homepage
+                f"{base_url}/news/",  # News generali
+                f"{base_url}/sport/",  # Sport
+                f"{base_url}/notizie/",  # Notizie
             ]
             
             article_links = []
@@ -338,17 +372,19 @@ class TrafilaturaLinkDiscoverer:
                     
                     soup = BeautifulSoup(html, 'html.parser')
                     
-                    # Estrai link articoli usando diversi selettori
+                    # Estrai link articoli usando selettori generici
                     selectors = [
-                        'a[href*="/l-angolo-di-calcio2000/"][href*="-2"]',  # Link angolo calcio con ID
-                        'a[href*="/l-intervista/"][href*="-2"]',           # Link interviste con ID  
-                        'a[href*="/la-legge-del-gol/"][href*="-2"]',       # Link legge del gol con ID
-                        'a[href*="/serie-a/"][href*="-2"]',                # Link serie A con ID
-                        'a[href*="/calciomercato/"][href*="-2"]',          # Link calciomercato con ID
-                        'a.titolo-notizia',                                # Classe titolo notizia
-                        'h2 a', 'h3 a',                                   # Link in titoli
-                        '.lista-notizie a',                                # Link in lista notizie  
-                        '.notizia a'                                       # Link generici notizie
+                        'a[href*="/news/"]',              # Link news generali
+                        'a[href*="/sport/"]',             # Link sport
+                        'a[href*="/notizie/"]',           # Link notizie
+                        'a[href*="/articolo/"]',          # Link articoli
+                        'a[href*="-2"]',                  # Link con ID articolo
+                        'a.titolo-notizia',               # Classe titolo notizia
+                        'h2 a', 'h3 a',                  # Link in titoli
+                        '.lista-notizie a',               # Link in lista notizie  
+                        '.notizia a',                     # Link generici notizie
+                        'article a',                      # Link negli articoli
+                        '.entry-title a'                  # Link titoli entry
                     ]
                     
                     for selector in selectors:
@@ -358,7 +394,13 @@ class TrafilaturaLinkDiscoverer:
                             if href:
                                 normalized = self._normalize_url(href, base_url)
                                 if normalized and self._is_article_url(normalized):
-                                    article_links.append(normalized)
+                                    # LIVELLO 1: Filtraggio per titolo del link usando modulo dedicato
+                                    link_title = link.get_text(strip=True)
+                                    if self.keyword_filter.title_matches_keywords(link_title, domain_keywords):
+                                        article_links.append(normalized)
+                                        logger.debug(f"Link accettato per titolo: {link_title[:50]}... -> {normalized}")
+                                    else:
+                                        logger.debug(f"Link rifiutato per titolo: {link_title[:50]}...")
                     
                     # Limite per categoria
                     if len(article_links) >= self.spider_max_pages // 2:
@@ -480,8 +522,8 @@ class TrafilaturaLinkDiscoverer:
         if any(pattern in url_lower for pattern in article_patterns):
             positive_score += 3
         
-        # Keywords del dominio
-        keyword_matches = sum(1 for kw in domain_keywords if kw in url_lower)
+        # Keywords del dominio nell'URL
+        keyword_matches = sum(1 for kw in domain_keywords if kw.lower() in url_lower)
         positive_score += keyword_matches * 2
         
         # URL strutturato (probabile articolo)
@@ -492,8 +534,13 @@ class TrafilaturaLinkDiscoverer:
         if any(char.isdigit() for char in url):
             positive_score += 1
         
-        # Decide in base al punteggio
-        return positive_score >= 2
+        # Se abbiamo keywords del dominio, richiedi almeno una corrispondenza
+        if domain_keywords and keyword_matches == 0:
+            # Senza keywords match, richiediamo score maggiore
+            return positive_score >= 4
+        else:
+            # Con keywords match, score più basso accettabile
+            return positive_score >= 2
     
     def get_discovery_stats(self) -> Dict[str, int]:
         """Statistiche discovery sessione corrente"""

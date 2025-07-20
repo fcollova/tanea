@@ -6,9 +6,13 @@ import asyncio
 import aiohttp
 import json
 import time
+import warnings
 from typing import Dict, Optional, List
 from datetime import datetime
 from urllib.parse import urlparse
+
+# Warning SSL gestiti nella configurazione
+import urllib3
 
 try:
     import trafilatura
@@ -17,9 +21,10 @@ try:
 except ImportError:
     TRAFILATURA_AVAILABLE = False
 
-from ..config import get_crawler_config
-from ..log import get_news_logger
+from core.config import get_crawler_config
+from core.log import get_news_logger
 from .rate_limiter import AdvancedRateLimiter
+from .keyword_filter import KeywordFilter
 
 logger = get_news_logger(__name__)
 
@@ -33,6 +38,7 @@ class ContentExtractor:
         self.config = get_crawler_config()
         self.session = None
         self.rate_limiter = AdvancedRateLimiter()
+        self.keyword_filter = KeywordFilter(debug=False)  # Filtro keywords dedicato
         
         # Configurazione trafilatura ottimizzata
         self._setup_trafilatura()
@@ -63,6 +69,30 @@ class ContentExtractor:
             config.set('DEFAULT', 'INCLUDE_TABLES', 'True')     # Utili per sport/statistiche
             config.set('DEFAULT', 'INCLUDE_FORMATTING', 'True')
             
+            # Configurazione SSL per trafilatura/requests
+            verify_ssl = self.config.get('verify_ssl', True)
+            if not verify_ssl:
+                logger.info("SSL verification disabilitata per trafilatura")
+                # Configura requests per disabilitare SSL warnings
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                
+                # Configura requests session per trafilatura
+                import requests
+                from requests.adapters import HTTPAdapter
+                from urllib3.util.retry import Retry
+                
+                # Crea session custom per trafilatura
+                session = requests.Session()
+                session.verify = False
+                
+                # Applica la session a trafilatura se possibile
+                try:
+                    # Trafilatura potrebbe usare questa session
+                    trafilatura.settings.DEFAULT_SESSION = session
+                except:
+                    pass
+            
             self.trafilatura_config = config
             logger.info("Trafilatura configurata per estrazione news")
             
@@ -72,8 +102,22 @@ class ContentExtractor:
     
     async def __aenter__(self):
         """Context manager entry"""
+        # Configurazione SSL basata su config
+        ssl_verify = self.config.get('verify_ssl', True)
+        
+        # Crea connector SSL
+        connector = None
+        if not ssl_verify:
+            import ssl
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            logger.info("SSL verification disabilitata per ContentExtractor")
+        
         self.session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=self.config['timeout']),
+            connector=connector,
             headers={
                 'User-Agent': self.config['user_agent'],
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -93,7 +137,7 @@ class ContentExtractor:
     async def extract_article(self, url: str, domain: str = "general", 
                             keywords: List[str] = None) -> Optional[Dict]:
         """
-        Estrae contenuto articolo da URL
+        Estrae contenuto articolo da URL con filtraggio multi-livello
         
         Args:
             url: URL articolo da estrarre
@@ -116,26 +160,34 @@ class ContentExtractor:
                 return None
             logger.info(f"[EXTRACTION DEBUG] Step 1 OK: HTML ottenuto ({len(html)} caratteri)")
             
-            # 2. Estrai contenuto con trafilatura  
-            logger.info(f"[EXTRACTION DEBUG] Step 2: Estrazione Trafilatura")
+            # 2. LIVELLO 2: Pre-filtraggio metadati rapido
+            if keywords:
+                logger.info(f"[EXTRACTION DEBUG] Step 2: Pre-filtraggio metadati")
+                if not await self._quick_metadata_filter(html, url, keywords):
+                    logger.info(f"[EXTRACTION DEBUG] FALLIMENTO Step 2: Pre-filtraggio metadati fallito")
+                    self.extraction_stats['failed_extractions'] += 1
+                    return None
+                logger.info(f"[EXTRACTION DEBUG] Step 2 OK: Metadati pre-filtrati con successo")
+            
+            # 3. Estrai contenuto con trafilatura  
+            logger.info(f"[EXTRACTION DEBUG] Step 3: Estrazione Trafilatura")
             extracted_data = self._extract_with_trafilatura(html, url)
             if not extracted_data:
-                logger.info(f"[EXTRACTION DEBUG] FALLIMENTO Step 2: Trafilatura non ha estratto dati")
+                logger.info(f"[EXTRACTION DEBUG] FALLIMENTO Step 3: Trafilatura non ha estratto dati")
                 self.extraction_stats['failed_extractions'] += 1
                 return None
-            logger.info(f"[EXTRACTION DEBUG] Step 2 OK: Dati estratti = {list(extracted_data.keys())}")
-            # logger.info(f"[EXTRACTION DEBUG] Dati estratti completi: {extracted_data}")  # Commentato per ridurre log
+            logger.info(f"[EXTRACTION DEBUG] Step 3 OK: Dati estratti = {list(extracted_data.keys())}")
             
-            # 3. Valida e enrichment
-            logger.info(f"[EXTRACTION DEBUG] Step 3: Validazione")
+            # 4. LIVELLO 3: Valida e enrichment con filtraggio completo
+            logger.info(f"[EXTRACTION DEBUG] Step 4: Validazione e filtraggio completo")
             article_data = self._validate_and_enrich(extracted_data, url, domain, keywords)
             if not article_data:
-                logger.info(f"[EXTRACTION DEBUG] FALLIMENTO Step 3: Validazione fallita")
+                logger.info(f"[EXTRACTION DEBUG] FALLIMENTO Step 4: Validazione fallita")
                 self.extraction_stats['failed_extractions'] += 1
                 return None
-            logger.info(f"[EXTRACTION DEBUG] Step 3 OK: Articolo validato")
+            logger.info(f"[EXTRACTION DEBUG] Step 4 OK: Articolo validato")
             
-            # 4. Aggiorna statistiche
+            # 5. Aggiorna statistiche
             self._update_stats(article_data)
             
             logger.info(f"[EXTRACTION DEBUG] SUCCESSO: {article_data['title'][:50]}...")
@@ -177,6 +229,54 @@ class ContentExtractor:
         except Exception as e:
             logger.error(f"Errore rate limiting per {url}: {e}")
             return None
+    
+    async def _quick_metadata_filter(self, html: str, url: str, keywords: List[str]) -> bool:
+        """
+        Pre-filtraggio rapido sui metadati (titolo, descrizione) senza estrazione completa
+        
+        Args:
+            html: HTML della pagina
+            url: URL dell'articolo
+            keywords: Keywords del dominio per filtraggio
+            
+        Returns:
+            bool: True se passa il pre-filtraggio, False altrimenti
+        """
+        try:
+            # Estrai solo metadati rapidi senza contenuto completo
+            metadata = trafilatura.extract_metadata(html)
+            if not metadata:
+                logger.debug(f"[PRE-FILTER] Nessun metadata estratto per {url}")
+                return False
+            
+            # Testo da controllare: titolo + descrizione
+            check_text = ""
+            if metadata.title:
+                check_text += metadata.title.lower()
+            if metadata.description:
+                check_text += " " + metadata.description.lower()
+            
+            if not check_text.strip():
+                logger.debug(f"[PRE-FILTER] Nessun testo nei metadati per {url}")
+                return False
+            
+            # Usa il filtro keywords dedicato per metadati
+            title = metadata.title or ""
+            description = metadata.description or ""
+            
+            result = self.keyword_filter.metadata_matches_keywords(title, description, keywords)
+            
+            if result:
+                logger.debug(f"[PRE-FILTER] ✅ Keywords trovate nei metadati per {url}")
+            else:
+                logger.debug(f"[PRE-FILTER] ❌ Keywords NON trovate nei metadati per {url}")
+            
+            return result
+            
+        except Exception as e:
+            logger.debug(f"[PRE-FILTER] Errore pre-filtraggio per {url}: {e}")
+            # In caso di errore, lascia passare per non perdere contenuti
+            return True
     
     def _extract_with_trafilatura(self, html: str, url: str) -> Optional[Dict]:
         """Estrae contenuto usando trafilatura"""
@@ -234,12 +334,16 @@ class ContentExtractor:
                 logger.info(f"[VALIDATION DEBUG] FALLIMENTO: Contenuto troppo corto: {url} ({len(content)} caratteri)")
                 return None
             
-            # Filtra per keywords se specificate
+            # LIVELLO 3: Filtraggio finale keywords usando modulo dedicato
             if keywords:
-                text_to_check = f"{title} {content}".lower()
-                if not any(keyword.lower() in text_to_check for keyword in keywords):
-                    logger.debug(f"Keywords non trovate in {url}")
+                is_relevant, keyword_score = self.keyword_filter.is_content_relevant(title, content, keywords)
+                logger.debug(f"[FINAL-FILTER] Score rilevanza keywords: {keyword_score:.2f} per {url}")
+                
+                if not is_relevant:
+                    logger.debug(f"[FINAL-FILTER] ❌ Contenuto non rilevante (score: {keyword_score:.2f}) per {url}")
                     return None
+                else:
+                    logger.debug(f"[FINAL-FILTER] ✅ Contenuto rilevante (score: {keyword_score:.2f}) per {url}")
             
             # Parse data pubblicazione
             published_date = self._parse_publication_date(extracted_data.get('date'))

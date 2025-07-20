@@ -68,31 +68,6 @@ crawling_sites:
         priority: 1               # Priorità sito
         rate_limit_override: 1.8  # Override rate limit specifico
         
-        # Pagine di categoria per discovery link
-        discovery_pages:
-          calcio_generale:
-            url: "https://www.gazzetta.it/Calcio/"
-            active: false
-            selectors:
-              article_links: "h2 a[href*='/calcio/'], .article-title a, .news-title a"
-              exclude_patterns: ["/video/", "/foto/", "/podcast/"]
-            max_links: 15
-            
-          serie_a:
-            url: "https://www.gazzetta.it/Calcio/Serie-A/"
-            active: false
-            selectors:
-              article_links: "h2 a, h3 a, .article-link"
-              exclude_patterns: ["/classifica/", "/calendario/"]
-            max_links: 12
-            
-          champions:
-            url: "https://www.gazzetta.it/Calcio/Champions-League/"
-            active: false
-            selectors:
-              article_links: "h2 a, .news-item a"
-            max_links: 8
-        
         # Parametri estrazione
         extraction:
           content_selectors:
@@ -117,22 +92,6 @@ crawling_sites:
         active: false
         priority: 2
         
-        discovery_pages:
-          calcio:
-            url: "https://www.corrieredellosport.it/calcio"
-            active: false
-            selectors:
-              article_links: ".article-title a, h2 a, h3 a"
-              exclude_patterns: ["/live/", "/diretta/"]
-            max_links: 12
-            
-          serie_a:
-            url: "https://www.corrieredellosport.it/calcio/serie-a"
-            active: false
-            selectors:
-              article_links: ".news-item a, .article-link"
-            max_links: 10
-        
         extraction:
           content_selectors:
             main: ".article-content, .story-body"
@@ -148,22 +107,6 @@ crawling_sites:
         active: true
         priority: 3
         rate_limit_override: 2.5  # Sito più lento
-        
-        discovery_pages:
-          serie_a:
-            url: "https://www.tuttomercatoweb.com/serie-a"
-            active: true
-            selectors:
-              article_links: "h2 a, .title a"
-              exclude_patterns: ["/fotogallery/", "/live/"]
-            max_links: 10
-            
-          calciomercato:
-            url: "https://www.tuttomercatoweb.com/calciomercato"
-            active: true
-            selectors:
-              article_links: ".news-title a, h3 a"
-            max_links: 8
         
         extraction:
           content_selectors:
@@ -187,14 +130,6 @@ crawling_sites:
         active: false             # Sito inattivo
         priority: 1
         
-        discovery_pages:
-          tecnologia:
-            url: "https://www.ansa.it/canale_tecnologia/"
-            active: false
-            selectors:
-              article_links: ".news-item h3 a, .article-title a"
-            max_links: 8
-        
         extraction:
           content_selectors:
             main: ".news-txt, .article-body"
@@ -214,14 +149,6 @@ crawling_sites:
         base_url: "https://www.ilsole24ore.com"
         active: false
         priority: 1
-        
-        discovery_pages:
-          finanza:
-            url: "https://www.ilsole24ore.com/finanza"
-            active: false
-            selectors:
-              article_links: ".article-title a, h2 a"
-            max_links: 10
         
         extraction:
           content_selectors:

@@ -1,0 +1,23 @@
+# CRAWLER REPORT - CRAWL
+# Generated:,2025-07-07 11:16:21
+
+=== SUMMARY ===
+Parameter,Value
+Operation Type,CRAWL
+Timestamp,2025-07-07 11:16:21
+Start Time,2025-07-07 11:15:57
+End Time,2025-07-07 11:16:21
+Duration Seconds,24.534338
+Duration Formatted,24.5s
+Sites Processed,1
+Links Discovered,0
+Links Crawled,0
+Articles Extracted,0
+Errors Count,0
+Success Rate,0.0%
+Extraction Rate,0.0%
+Avg Articles Per Site,0.0
+
+=== SITES DETAILS ===
+site_key,links_discovered,links_crawled,articles_extracted,errors,success_rate,status
+domain_calcio,0,0,0,0,0.0%,FAILED

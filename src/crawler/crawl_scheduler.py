@@ -10,10 +10,10 @@ from typing import Dict, List, Optional, Any, Callable
 from enum import Enum
 
 from .trafilatura_crawler import TrafilaturaCrawler
-from ..storage.database_manager import DatabaseManager
-from ..domain_manager import DomainManager
-from ..config import get_scheduler_config, get_crawler_config
-from ..log import get_news_logger
+from core.storage.database_manager import DatabaseManager
+from core.domain_manager import DomainManager
+from core.config import get_scheduler_config, get_crawler_config
+from core.log import get_news_logger
 
 logger = get_news_logger(__name__)
 

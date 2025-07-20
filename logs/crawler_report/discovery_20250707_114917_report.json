@@ -1,0 +1,30 @@
+{
+  "metadata": {
+    "report_generated": "2025-07-07 11:49:17",
+    "operation_type": "DISCOVERY",
+    "generator": "TaneaCrawler ReportGenerator",
+    "version": "1.0"
+  },
+  "summary": {
+    "operation_type": "DISCOVERY",
+    "timestamp": "2025-07-07 11:49:17",
+    "total_sites_processed": 1,
+    "total_links_discovered": 50,
+    "domains_processed": 1,
+    "domain_list": "calcio",
+    "errors_count": 0,
+    "success_rate": "100.0%",
+    "avg_links_per_site": "50.0"
+  },
+  "sites_details": [
+    {
+      "site_key": "calcio_tuttomercatoweb",
+      "site_name": "tuttomercatoweb",
+      "domain": "calcio",
+      "links_discovered": 50,
+      "pages_processed": 2,
+      "status": "SUCCESS",
+      "pages_detail": "{\n  \"serie_a\": {\n    \"url\": \"https://www.tuttomercatoweb.com/serie-a\",\n    \"links_found\": 10,\n    \"max_links\": 10\n  },\n  \"calciomercato\": {\n    \"url\": \"https://www.tuttomercatoweb.com/calciomercato\",\n    \"links_found\": 8,\n    \"max_links\": 8\n  }\n}"
+    }
+  ]
+}

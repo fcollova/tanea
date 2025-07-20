@@ -14,8 +14,8 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from ..config import get_crawler_config
-from ..log import get_news_logger
+from core.config import get_crawler_config
+from core.log import get_news_logger
 
 logger = get_news_logger(__name__)
 

@@ -76,6 +76,13 @@ python-dateutil>=2.8.0
 pandas>=2.0.0
 numpy>=1.24.0
 
+# === REPORT GENERATION ===
+# Excel report generation
+openpyxl>=3.1.0
+
+# PDF report generation
+reportlab>=4.0.0
+
 # === OPTIONAL DEPENDENCIES ===
 # Text processing (uncomment if needed)
 # nltk>=3.8
@@ -96,3 +103,5 @@ flake8>=6.0.0
 # - Streamlit: Dashboard interattiva per esplorare database Weaviate
 # - Plotly: Grafici interattivi per analytics
 # - WordCloud: Generazione word clouds per analisi testo
+# - OpenPyXL: Generazione report Excel per operazioni crawler
+# - ReportLab: Generazione report PDF per analisi avanzate
