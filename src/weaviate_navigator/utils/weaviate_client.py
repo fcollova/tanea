@@ -37,38 +37,29 @@ class WeaviateExplorer:
             
             logger.info("🤖 Inizializzazione modello Bertino per ricerca semantica...")
             
-            # Usa la stessa configurazione del crawler per evitare download duplicati
+            # Usa la configurazione centralizzata da config.conf
             try:
                 from core.config import Config
-                from pathlib import Path
                 
                 config = Config()
                 embedding_config = config.get_embedding_config()
                 custom_model = embedding_config['custom_model']
                 max_length = embedding_config['max_length']
+                cache_dir = embedding_config['cache_dir']  # Già risolto in path assoluto
                 
-                # Converti cache_dir in path assoluto per evitare cache duplicate
-                cache_dir_raw = embedding_config['cache_dir']
-                if cache_dir_raw.startswith('./'):
-                    # Path relativo: risolvi dalla root del progetto
-                    project_root = Path(__file__).parent.parent.parent.parent  # Torna alla root tanea/
-                    cache_dir = str(project_root / cache_dir_raw[2:])  # Rimuovi './'
-                else:
-                    cache_dir = cache_dir_raw
-                    
-                logger.info(f"📁 Cache dir assoluta: {cache_dir}")
+                logger.info(f"📁 Cache dir centralizzata: {cache_dir}")
                 
             except Exception as config_error:
                 # Fallback alla configurazione manuale se config non disponibile
-                logger.warning(f"⚠️ Config crawler non disponibile: {config_error}")
+                logger.warning(f"⚠️ Config centralizzato non disponibile: {config_error}")
                 custom_model = "nickprock/multi-sentence-BERTino"
                 max_length = 512
                 
-                # Fallback anche per cache dir assoluta
+                # Fallback con cache dir centralizzata
                 from pathlib import Path
                 project_root = Path(__file__).parent.parent.parent.parent
                 cache_dir = str(project_root / "fastembed_cache")
-                logger.info(f"📁 Cache dir fallback assoluta: {cache_dir}")
+                logger.info(f"📁 Cache dir fallback centralizzata: {cache_dir}")
             
             # Registra il modello custom Bertino (evita errore se già registrato)
             try:

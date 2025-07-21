@@ -67,23 +67,6 @@ crawling_sites:
         active: false             # Sito disattivato per crawling
         priority: 1               # Priorità sito
         rate_limit_override: 1.8  # Override rate limit specifico
-        
-        # Parametri estrazione
-        extraction:
-          content_selectors:
-            main: "article .article-body, .content-body, .story-content"
-            fallback: ".article-text, .news-content"
-          title_selectors: "h1, .article-title, .main-title"
-          author_selectors: ".author, .byline, .article-author"
-          date_selectors: ".date, .publish-date, time[datetime]"
-          
-          # Cleanup contenuto
-          remove_selectors: 
-            - ".advertisement, .ads"
-            - ".social-share, .share-buttons"
-            - ".related-articles, .more-news"
-            - ".newsletter-signup"
-            - ".cookie-banner"
 
       # === CORRIERE DELLO SPORT ===
       corriere_sport:
@@ -91,14 +74,6 @@ crawling_sites:
         base_url: "https://www.corrieredellosport.it"
         active: false
         priority: 2
-        
-        extraction:
-          content_selectors:
-            main: ".article-content, .story-body"
-            fallback: ".content, .text"
-          title_selectors: "h1.article-title, .main-headline"
-          author_selectors: ".author-name, .byline"
-          date_selectors: ".article-date, .timestamp"
 
       # === TUTTOMERCATOWEB ===
       tuttomercatoweb:
@@ -107,13 +82,17 @@ crawling_sites:
         active: true
         priority: 3
         rate_limit_override: 2.5  # Sito più lento
+
+
+      # === CALCIOMERCATO ===
+      calciomercato:
+        name: "Calciomercato"
+        base_url: "https://www.calciomercato.com/notizie"
+        active: true
+        priority: 3
+        rate_limit_override: 2.5  # Sito più lento
+
         
-        extraction:
-          content_selectors:
-            main: ".news-body, .article-text"
-          title_selectors: "h1.news-title"
-          author_selectors: ".author"
-          date_selectors: ".news-date"
 
   # ========================================================================
   # DOMINIO: TECNOLOGIA  
@@ -129,11 +108,6 @@ crawling_sites:
         base_url: "https://www.ansa.it"
         active: false             # Sito inattivo
         priority: 1
-        
-        extraction:
-          content_selectors:
-            main: ".news-txt, .article-body"
-          title_selectors: "h1.news-title"
 
   # ========================================================================
   # DOMINIO: FINANZA
@@ -149,11 +123,6 @@ crawling_sites:
         base_url: "https://www.ilsole24ore.com"
         active: false
         priority: 1
-        
-        extraction:
-          content_selectors:
-            main: ".article-body, .content-text"
-          title_selectors: "h1.article-headline"
 
 # === MAPPATURA DOMINI ===
 # Mapping esplicito per validazione e coordinamento

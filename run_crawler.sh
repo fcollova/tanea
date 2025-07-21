@@ -44,14 +44,8 @@ print(config.get('url', ''))
 ")
 export DATABASE_URL
 
-# Vai alla directory del crawler
-cd src/crawler
-
-# Esegui il crawler con gli argomenti passati
+# Esegui il crawler dalla directory root per evitare cache duplicate
 echo -e "${YELLOW}🚀 Esecuzione crawler...${NC}"
-python crawler_exec.py "$@"
-
-# Ritorna alla directory principale
-cd ../..
+python src/crawler/crawler_exec.py "$@"
 
 echo -e "${GREEN}✅ Crawler terminato${NC}"

@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "report_generated": "2025-07-21 11:53:38",
+    "operation_type": "CRAWL",
+    "generator": "TaneaCrawler ReportGenerator",
+    "version": "1.0"
+  },
+  "summary": {
+    "operation_type": "CRAWL",
+    "timestamp": "2025-07-21 11:53:38",
+    "start_time": "2025-07-21 11:52:25",
+    "end_time": "2025-07-21 11:53:38",
+    "duration_seconds": 72.346846,
+    "duration_formatted": "72.3s",
+    "sites_processed": 2,
+    "links_discovered": 5,
+    "links_crawled": 5,
+    "articles_extracted": 4,
+    "errors_count": 0,
+    "success_rate": "80.0%",
+    "extraction_rate": "80.0%",
+    "avg_articles_per_site": "2.0"
+  },
+  "sites_details": []
+}

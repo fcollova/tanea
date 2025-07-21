@@ -139,11 +139,23 @@ class Config:
         }
     
     def get_embedding_config(self) -> Dict[str, Any]:
-        """Ottiene la configurazione del modello di embedding"""
+        """Ottiene la configurazione del modello di embedding con path assoluto centralizzato"""
+        cache_dir_raw = self.get('embedding', 'cache_dir', 'fastembed_cache')
+        
+        # Risolvi path assoluto per cache centralizzata
+        if not cache_dir_raw.startswith('/'):
+            # Path relativo: risolvi dalla root del progetto
+            from pathlib import Path
+            project_root = Path(__file__).parent.parent.parent  # Torna alla root /tanea
+            cache_dir = str(project_root / cache_dir_raw)
+        else:
+            # Path già assoluto
+            cache_dir = cache_dir_raw
+        
         return {
             'model_name': self.get('embedding', 'model_name', 'intfloat/multilingual-e5-base'),
             'max_length': self.get('embedding', 'max_length', 512, int),
-            'cache_dir': self.get('embedding', 'cache_dir', './fastembed_cache'),
+            'cache_dir': cache_dir,
             'custom_model': self.get('embedding', 'custom_model', 'nickprock/multi-sentence-BERTino'),
             'fallback_model': self.get('embedding', 'fallback_model', 'sentence-transformers/all-MiniLM-L6-v2')
         }

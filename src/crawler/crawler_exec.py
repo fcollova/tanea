@@ -11,6 +11,10 @@ import os
 from typing import List, Optional
 from datetime import datetime
 
+# Imposta working directory alla root del progetto per cache centralizzata
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+os.chdir(project_root)
+
 # Aggiungi src al path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
