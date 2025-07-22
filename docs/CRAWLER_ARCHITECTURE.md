@@ -754,8 +754,92 @@ config.conf ────────→ Technical Setup → Crawler Execution
 
 **Fallimento di qualsiasi controllo → ERROR esplicito, nessun fallback silenzioso**
 
+## 🗂️ Gestione Database e Strumenti di Pulizia
+
+### Script di Pulizia Database
+
+Il sistema include strumenti completi per la gestione e pulizia dei database:
+
+#### Script Bash Principale (`clean_db.sh`)
+```bash
+./clean_db.sh
+```
+
+**Menu Opzioni**:
+- `1` - 🔍 Verifica stato database
+- `2` - 🧹 Menu completo interattivo  
+- `3` - 🚀 Reset rapido completo
+- `4` - 📋 Lista collezioni Weaviate
+- `5` - 🗑️ Elimina collezione specifica
+- `0` - ❌ Annulla
+
+#### Script Python Dedicati
+
+**Script Principale** (`clean_databases.py`):
+```bash
+python3 scripts/clean_databases.py  # Menu interattivo completo
+```
+
+**Script Specializzati**:
+```bash
+python3 scripts/list_collections.py      # Lista collezioni Weaviate
+python3 scripts/delete_collection.py     # Elimina collezione specifica
+python3 scripts/quick_reset.py          # Reset rapido completo
+```
+
+### Gestione Collezioni Weaviate
+
+#### Architettura Indici per Dominio
+Ogni dominio ha il proprio indice Weaviate isolato:
+```
+Tanea_Calcio_DEV        → articoli dominio calcio
+Tanea_Tecnologia_DEV    → articoli dominio tecnologia  
+Tanea_General_DEV       → articoli dominio general
+```
+
+#### Lista Collezioni
+Visualizza tutte le collezioni con statistiche:
+```
+📊 Stato attuale Weaviate:
+   • Collezioni Tanea: 2
+   • Altre collezioni: 2
+
+🎯 Collezioni Tanea:
+    1. Tanea_Calcio_DEV: 95 documenti (dominio: calcio)
+    2. Tanea_General_DEV: 0 documenti (dominio: unknown)
+
+📋 Altre collezioni:  
+    3. LinksMetadata_DEV: 0 documenti
+    4. NewsArticles_DEV: 210 documenti
+```
+
+#### Eliminazione Granulare
+**Vantaggi gestione per collezione singola**:
+- ✅ Mantiene altre collezioni intatte
+- ✅ Utile per test e correzioni mirate  
+- ✅ Evita reset completo quando non necessario
+- ✅ Numerazione unificata per selezione intuitiva
+
+**Procedura Sicura**:
+1. 📋 Mostra lista collezioni numerata
+2. 🎯 Seleziona numero collezione
+3. ⚠️ Conferma con `DELETE` (case-sensitive)
+4. 🗑️ Eliminazione irreversibile
+
+### Database PostgreSQL
+**Gestione automatica**:
+- Reset sequenze auto-increment (`Site_id_seq`, `DiscoveredLink_id_seq`)
+- Pulizia tabelle `Site` e `DiscoveredLink`
+- Verifica integrità connessioni
+
+### Procedure di Manutenzione
+- **Verifica stato**: Controlla connettività e conteggi
+- **Reset completo**: PostgreSQL + Weaviate + creazione schemi
+- **Pulizia selettiva**: Solo PostgreSQL o solo Weaviate
+- **Resource cleanup**: Chiusura corretta tutte le connessioni
+
 ---
 
-*Documentazione aggiornata il: 20 Luglio 2025*  
-*Versione Crawler: 2.0*  
-*Architettura: Modulare Multi-Livello con Storage Ibrido e Filtraggio Keywords Avanzato*
+*Documentazione aggiornata il: 22 Luglio 2025*  
+*Versione Crawler: 2.1*  
+*Architettura: Modulare Multi-Livello con Storage Ibrido Domain-Separated e Strumenti Avanzati di Gestione Database*
