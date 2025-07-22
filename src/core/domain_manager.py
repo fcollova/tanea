@@ -12,6 +12,7 @@ class DomainConfig:
     id: str
     name: str
     description: str
+    weaviate_index: str
     active: bool
     keywords: List[str]
     max_results: Dict[str, int]
@@ -51,6 +52,7 @@ class DomainManager:
                     id=domain_id,
                     name=domain_config['name'],
                     description=domain_config['description'],
+                    weaviate_index=domain_config.get('weaviate_index', f'Tanea_{domain_id.capitalize()}'),
                     active=domain_config.get('active', True),  # Default True per backward compatibility
                     keywords=domain_config['keywords'],
                     max_results=domain_config['max_results']
@@ -308,3 +310,105 @@ class DomainManager:
             "active": active_count,
             "inactive": inactive_count
         }
+    
+    # ========================================================================
+    # METODI WEAVIATE INDEX MANAGEMENT
+    # ========================================================================
+    
+    def get_weaviate_index(self, domain_id: str, environment: str = 'dev') -> str:
+        """
+        Ottiene il nome dell'index Weaviate per un dominio in un ambiente specifico
+        
+        Args:
+            domain_id: ID del dominio
+            environment: Ambiente (dev/prod)
+            
+        Returns:
+            Nome dell'index Weaviate nel formato Tanea_[domain]_[environment]
+        """
+        domain = self.get_domain(domain_id)
+        if not domain:
+            # Fallback se dominio non trovato
+            base_name = f'Tanea_{domain_id.capitalize()}'
+        else:
+            base_name = domain.weaviate_index
+        
+        return f"{base_name}_{environment.upper()}"
+    
+    def get_all_weaviate_indexes(self, environment: str = 'dev', active_only: bool = True) -> Dict[str, str]:
+        """
+        Ottiene tutti gli index Weaviate per i domini configurati
+        
+        Args:
+            environment: Ambiente (dev/prod)
+            active_only: Se True, restituisce solo index per domini attivi
+            
+        Returns:
+            Dizionario {domain_id: index_name}
+        """
+        domains = self.get_all_domains(active_only)
+        return {
+            domain_id: self.get_weaviate_index(domain_id, environment) 
+            for domain_id in domains.keys()
+        }
+    
+    def get_domain_by_index(self, index_name: str) -> Optional[str]:
+        """
+        Ottiene l'ID del dominio partendo dal nome dell'index Weaviate
+        
+        Args:
+            index_name: Nome dell'index (es. Tanea_Calcio_DEV)
+            
+        Returns:
+            ID del dominio o None se non trovato
+        """
+        # Parsing del formato Tanea_[domain]_[environment]
+        if not index_name.startswith('Tanea_'):
+            return None
+            
+        parts = index_name.split('_')
+        if len(parts) < 3:
+            return None
+            
+        # Ricostruisce il nome del dominio (può avere underscore)
+        domain_part = '_'.join(parts[1:-1])  # Tutto tranne Tanea e environment
+        
+        # Cerca il dominio corrispondente
+        for domain_id, domain in self.domains.items():
+            if domain.weaviate_index == f'Tanea_{domain_part}':
+                return domain_id
+                
+        # Fallback: cerca per nome case-insensitive
+        for domain_id in self.domains.keys():
+            if domain_id.lower() == domain_part.lower():
+                return domain_id
+                
+        return None
+    
+    def validate_weaviate_index(self, domain_id: str, environment: str = 'dev') -> bool:
+        """
+        Valida che l'index Weaviate per un dominio segua il formato corretto
+        
+        Args:
+            domain_id: ID del dominio
+            environment: Ambiente
+            
+        Returns:
+            True se l'index è valido, False altrimenti
+        """
+        domain = self.get_domain(domain_id)
+        if not domain:
+            return False
+            
+        index_name = self.get_weaviate_index(domain_id, environment)
+        
+        # Verifica formato: deve iniziare con Tanea_ e terminare con _ENV
+        if not index_name.startswith('Tanea_'):
+            logger.error(f"Index {index_name} non inizia con 'Tanea_'")
+            return False
+            
+        if not index_name.endswith(f'_{environment.upper()}'):
+            logger.error(f"Index {index_name} non termina con '_{environment.upper()}'")
+            return False
+            
+        return True

@@ -17,12 +17,13 @@ logger = get_news_logger(__name__)
 class DatabaseManager:
     """Coordinatore per architettura ibrida PostgreSQL + Weaviate"""
     
-    def __init__(self, environment: str = None):
+    def __init__(self, environment: str = None, domain: str = None):
         self.environment = environment or 'dev'
+        self.domain = domain
         
         # Inizializza componenti storage
         self.link_db = LinkDatabase()
-        self.vector_db = VectorCollections(environment)
+        self.vector_db = VectorCollections(environment, domain)
         
         self._link_db_connected = False
         self._vector_db_initialized = False
@@ -31,7 +32,10 @@ class DatabaseManager:
         """Inizializza entrambi i database"""
         await self._init_link_database()
         self._init_vector_database()
-        logger.info("DatabaseManager inizializzato completamente")
+        if self.domain:
+            logger.info(f"DatabaseManager inizializzato per dominio '{self.domain}' in ambiente {self.environment}")
+        else:
+            logger.info("DatabaseManager inizializzato completamente")
     
     async def _init_link_database(self):
         """Inizializza connessione PostgreSQL"""

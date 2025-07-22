@@ -18,17 +18,25 @@ logger = get_news_logger(__name__)
 class VectorCollections:
     """Gestore collezioni Weaviate per ricerca semantica"""
     
-    def __init__(self, environment: str = None):
+    def __init__(self, environment: str = None, domain: str = None):
         self.weaviate_config = get_weaviate_config()
         self.environment = environment or 'dev'
+        self.domain = domain
         
-        # Inizializza vector DB manager
-        self.vector_db_manager = VectorDBManager(environment)
+        # Inizializza vector DB manager con supporto domini
+        self.vector_db_manager = VectorDBManager(environment, domain)
         self.weaviate_client = None
         self.embeddings = None
         
-        # Collezioni specifiche
-        self.articles_collection_name = f"NewsArticles_{self.environment.upper()}"
+        # Collezioni specifiche (manteniamo per compatibilità con metadata)
+        if domain:
+            # Nuovo formato domain-specific
+            domain_manager = self.vector_db_manager.domain_manager
+            self.articles_collection_name = domain_manager.get_weaviate_index(domain, self.environment)
+        else:
+            # Comportamento legacy
+            self.articles_collection_name = f"NewsArticles_{self.environment.upper()}"
+            
         self.links_metadata_collection_name = f"LinksMetadata_{self.environment.upper()}"
         
         self._initialized = False
@@ -39,7 +47,10 @@ class VectorCollections:
             self.weaviate_client, self.embeddings = self.vector_db_manager.initialize_all()
             self._ensure_collections_exist()
             self._initialized = True
-            logger.info(f"VectorCollections inizializzato per ambiente: {self.environment}")
+            if self.domain:
+                logger.info(f"VectorCollections inizializzato per dominio '{self.domain}' in ambiente: {self.environment}")
+            else:
+                logger.info(f"VectorCollections inizializzato per ambiente: {self.environment}")
     
     def _ensure_collections_exist(self):
         """Assicura che le collezioni esistano"""

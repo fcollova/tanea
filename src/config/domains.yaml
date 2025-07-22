@@ -5,6 +5,7 @@ domains:
   calcio:
     name: "Calcio"
     description: "Notizie sul calcio italiano e internazionale"
+    weaviate_index: "Tanea_Calcio"
     active: true
     keywords:
       - "Serie A"
@@ -36,6 +37,7 @@ domains:
   tecnologia:
     name: "Tecnologia"
     description: "Notizie su tecnologia, AI e innovazione"
+    weaviate_index: "Tanea_Tecnologia"
     active: false
     keywords:
       - "intelligenza artificiale"
@@ -54,6 +56,7 @@ domains:
   finanza:
     name: "Finanza"
     description: "Notizie economiche e finanziarie"
+    weaviate_index: "Tanea_Finanza"
     active: false
     keywords:
       - "borsa italiana"
@@ -72,6 +75,7 @@ domains:
   salute:
     name: "Salute"
     description: "Notizie su medicina e salute pubblica"
+    weaviate_index: "Tanea_Salute"
     active: false
     keywords:
       - "medicina"
@@ -89,6 +93,7 @@ domains:
   ambiente:
     name: "Ambiente"
     description: "Notizie su ambiente e sostenibilità"
+    weaviate_index: "Tanea_Ambiente"
     active: false
     keywords:
       - "cambiamenti climatici"

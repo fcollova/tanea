@@ -134,8 +134,8 @@ class Config:
         return {
             'url': self.get('weaviate', 'url', 'http://localhost:8080'),
             'api_key': self.get('weaviate', 'api_key'),
-            'index_name': self.get('weaviate', 'index_name', 'NewsArticles'),
             'timeout': self.get('weaviate', 'timeout', 30, int)
+            # index_name ora gestito dinamicamente tramite DomainManager
         }
     
     def get_embedding_config(self) -> Dict[str, Any]:

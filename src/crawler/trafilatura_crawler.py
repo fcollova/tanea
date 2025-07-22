@@ -96,12 +96,14 @@ class TrafilaturaCrawler:
         # Inizializza componenti
         self.link_discoverer = TrafilaturaLinkDiscoverer()
         self.content_extractor = ContentExtractor()
-        self.db_manager = DatabaseManager(self.environment)
+        # db_manager sarà creato dinamicamente per ogni dominio
+        self.db_manager = None
+        self._domain_db_managers = {}
         
         # Inizializza connessioni
         await self.link_discoverer.__aenter__()
         await self.content_extractor.__aenter__()
-        await self.db_manager.initialize()
+        # db_manager inizializzato dinamicamente per dominio
         
         logger.info("TrafilaturaCrawler inizializzato")
         return self
@@ -116,8 +118,39 @@ class TrafilaturaCrawler:
         
         if self.db_manager:
             await self.db_manager.close()
+            
+        # Chiudi tutti i DatabaseManager per dominio
+        for domain, db_manager in self._domain_db_managers.items():
+            try:
+                await db_manager.close()
+                logger.info(f"DatabaseManager per dominio '{domain}' disconnesso")
+            except Exception as e:
+                logger.error(f"Errore chiusura DatabaseManager per dominio '{domain}': {e}")
         
         logger.info("TrafilaturaCrawler disconnesso")
+    
+    # ========================================================================
+    # GESTIONE DATABASE MANAGER PER DOMINIO
+    # ========================================================================
+    
+    async def get_domain_db_manager(self, domain: str) -> DatabaseManager:
+        """
+        Ottiene o crea il DatabaseManager per un dominio specifico
+        
+        Args:
+            domain: ID del dominio
+            
+        Returns:
+            DatabaseManager per il dominio
+        """
+        if domain not in self._domain_db_managers:
+            # Crea nuovo DatabaseManager per questo dominio
+            db_manager = DatabaseManager(self.environment, domain)
+            await db_manager.initialize()
+            self._domain_db_managers[domain] = db_manager
+            logger.info(f"Creato DatabaseManager per dominio '{domain}'")
+        
+        return self._domain_db_managers[domain]
     
     # ========================================================================
     # CRAWLING PRINCIPALE
@@ -182,8 +215,11 @@ class TrafilaturaCrawler:
                 self.crawl_stats['errors'] += 1
                 return  # Skip questo sito invece di crashare tutto il crawling
             
+            # Ottieni DatabaseManager per questo dominio
+            db_manager = await self.get_domain_db_manager(domain)
+            
             # 1. Assicura che il sito sia nel database
-            site_db = await self._ensure_site_in_database(site_name, site_config)
+            site_db = await self._ensure_site_in_database(site_name, site_config, domain)
             
             # 2. Link Discovery
             discovered_links = await self.link_discoverer.discover_site_links(site_config)
@@ -192,7 +228,7 @@ class TrafilaturaCrawler:
                 return
             
             # 3. Salva link scoperti nel database
-            added_count = await self.db_manager.link_db.add_discovered_links(
+            added_count = await db_manager.link_db.add_discovered_links(
                 links=discovered_links,
                 site_id=site_db.id,
                 parent_url=site_config['base_url']
@@ -201,7 +237,7 @@ class TrafilaturaCrawler:
             
             # 4. Recupera link da crawlare (nuovi + alcuni vecchi)
             max_links = self.config.get('max_articles_per_site', 20)
-            links_to_crawl = await self.db_manager.link_db.get_links_to_crawl(
+            links_to_crawl = await db_manager.link_db.get_links_to_crawl(
                 site_id=site_db.id,
                 limit=max_links
             )
@@ -218,7 +254,7 @@ class TrafilaturaCrawler:
                 return
             
             # 5. Content Extraction (usa il dominio già verificato)
-            await self._crawl_links_batch(links_to_crawl, domain)
+            await self._crawl_links_batch(links_to_crawl, domain, db_manager)
             
             logger.info(f"Sito {site_name} completato: {len(links_to_crawl)} link processati")
             
@@ -226,7 +262,7 @@ class TrafilaturaCrawler:
             logger.error(f"Errore crawling sito {site_name}: {e}")
             raise
     
-    async def _crawl_links_batch(self, links_to_crawl: List, domain: str):
+    async def _crawl_links_batch(self, links_to_crawl: List, domain: str, db_manager: DatabaseManager):
         """Crawla batch di link con extraction e storage"""
         try:
             logger.info(f"Inizio processing {len(links_to_crawl)} link per dominio: {domain}")
@@ -238,7 +274,7 @@ class TrafilaturaCrawler:
             for i in range(0, len(links_to_crawl), batch_size):
                 batch = links_to_crawl[i:i + batch_size]
                 logger.info(f"Processing batch {i//batch_size + 1}: {len(batch)} link")
-                await self._process_links_batch(batch, domain)
+                await self._process_links_batch(batch, domain, db_manager)
                 
                 # Piccola pausa tra batch
                 await asyncio.sleep(1.0)
@@ -247,14 +283,14 @@ class TrafilaturaCrawler:
             logger.error(f"Errore processing batch link: {e}")
             raise
     
-    async def _process_links_batch(self, batch_links: List, domain: str):
+    async def _process_links_batch(self, batch_links: List, domain: str, db_manager: DatabaseManager):
         """Processa un piccolo batch di link"""
         logger.info(f"_process_links_batch chiamato con {len(batch_links)} link")
         tasks = []
         
         for link_record in batch_links:
             logger.info(f"Creando task per link: {link_record.url}")
-            task = self._process_single_link(link_record, domain)
+            task = self._process_single_link(link_record, domain, db_manager)
             tasks.append(task)
         
         logger.info(f"Eseguendo {len(tasks)} task concorrenti")
@@ -269,13 +305,13 @@ class TrafilaturaCrawler:
             else:
                 logger.info(f"Link {batch_links[i].url} processato con successo")
     
-    async def _process_single_link(self, link_record, domain: str):
+    async def _process_single_link(self, link_record, domain: str, db_manager: DatabaseManager):
         """Processa un singolo link: extraction + storage"""
         try:
             logger.info(f"Inizio processing link: {link_record.url}")
             
             # 1. Marca link come in crawling
-            await self.db_manager.link_db.mark_link_crawling(link_record.id)
+            await db_manager.link_db.mark_link_crawling(link_record.id)
             logger.info(f"Link marcato come in crawling: {link_record.id}")
             
             # 2. Ottieni keywords del dominio per filtraggio
@@ -298,7 +334,7 @@ class TrafilaturaCrawler:
             logger.info(f"Estrazione completata, risultato: {bool(article_data)}")
             
             if not article_data:
-                await self.db_manager.link_db.mark_link_crawled(
+                await db_manager.link_db.mark_link_crawled(
                     link_record.id,
                     success=False,
                     error_message="Estrazione contenuto fallita"
@@ -306,7 +342,7 @@ class TrafilaturaCrawler:
                 return
             
             # 3. Salva articolo (PostgreSQL + Weaviate)
-            success = await self.db_manager.process_crawled_article(
+            success = await db_manager.process_crawled_article(
                 link_id=link_record.id,
                 article_data=article_data
             )
@@ -320,7 +356,7 @@ class TrafilaturaCrawler:
         except Exception as e:
             logger.error(f"Errore processing link {link_record.url}: {e}")
             try:
-                await self.db_manager.link_db.mark_link_crawled(
+                await db_manager.link_db.mark_link_crawled(
                     link_record.id,
                     success=False,
                     error_message=str(e)
@@ -358,21 +394,24 @@ class TrafilaturaCrawler:
         logger.info(f"Siti da crawlare: {list(active_sites.keys())}")
         return active_sites
     
-    async def _ensure_site_in_database(self, site_name: str, site_config: Dict[str, Any]):
+    async def _ensure_site_in_database(self, site_name: str, site_config: Dict[str, Any], domain: str):
         """Assicura che il sito sia presente nel database PostgreSQL"""
-        existing_site = await self.db_manager.link_db.get_site_by_name(site_name)
+        # Usa il DatabaseManager per il dominio
+        db_manager = await self.get_domain_db_manager(domain)
+        
+        existing_site = await db_manager.link_db.get_site_by_name(site_name)
         
         if not existing_site:
-            site = await self.db_manager.link_db.create_site(
+            site = await db_manager.link_db.create_site(
                 name=site_name,
                 base_url=site_config['base_url'],
                 config=site_config
             )
-            logger.info(f"Sito {site_name} aggiunto al database")
+            logger.info(f"Sito {site_name} aggiunto al database per dominio {domain}")
             return site
         else:
             # Aggiorna configurazione se necessario
-            await self.db_manager.link_db.update_site_config(
+            await db_manager.link_db.update_site_config(
                 existing_site.id, 
                 site_config
             )
